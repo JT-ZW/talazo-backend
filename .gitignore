@@ -1,0 +1,25 @@
+node_modules/
+.svelte-kit/
+build/
+.env
+.env.*
+!.env.example
+.mongo-local/
+.pg-pilot-test/
+.admin-access-link.txt
+test-results/
+playwright-report/
+.playwright/
+*.log
+*.pem
+*.key
+*.pfx
+*.p12
+*invitation*.txt
+*access-link*.txt
+# Local operator records contain live account/field identifiers and audit data.
+scripts/register-live-pilot.mjs
+docs/FARMONAUT-LIVE-RECONCILIATION.md
+docs/PRODUCTION-CONNECTION.md
+docs/PRODUCTION-AUDIT-*.md
+docs/audits/supabase-schema.json

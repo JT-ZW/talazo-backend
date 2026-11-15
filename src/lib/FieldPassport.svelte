@@ -1,0 +1,15 @@
+﻿<script lang="ts">
+ import DatePicker from './DatePicker.svelte';
+ import {todayISO} from './calendar.mjs';
+ import {enhance} from '$app/forms';
+ let {zone,farm,activities,enhanced,busy}:{zone:any,farm:any,activities:any[],enhanced:any,busy:boolean}=$props();
+ let records=$derived(activities.filter(a=>a.zone_id===zone.id).sort((a,b)=>b.activity_date.localeCompare(a.activity_date)));
+ function download(){
+  const blob=new Blob([JSON.stringify({exportedAt:new Date().toISOString(),source:'Talazo farmer-entered records; not independently certified',farm:{name:farm?.name,district:farm?.district},field:zone,activities:records},null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`talazo-field-${zone.id}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ }
+</script>
+<section class="p-card"><div class="p-section-heading"><div><p class="p-kicker">TRACEABILITY / FIELD PASSPORT</p><h2>A record behind every crop.</h2></div><button class="p-button subtle" type="button" onclick={download}>Export field record</button></div><p>Record actual operations and harvest or delivery batch references. This farmer-entered history supports sourcing reviews; it does not certify sustainability or regulatory compliance.</p><dl class="p-facts"><div><dt>Farm / field</dt><dd>{farm?.name} / {zone.name}</dd></div><div><dt>Crop</dt><dd>{zone.crop_name}</dd></div><div><dt>Mapped area</dt><dd>{(zone.area_sqm/10000).toFixed(4)} ha</dd></div><div><dt>Actual planting date</dt><dd>{zone.sowing_date||'Not recorded'}</dd></div></dl>
+<form method="POST" action="?/activity" use:enhance={enhanced}><input type="hidden" name="zone" value={zone.id}/><div class="p-form"><label class="p-field">Activity date<DatePicker name="date" required max={todayISO()} label="Activity date"/></label><label class="p-field">Operation<select name="kind"><option value="scouting">Field scouting</option><option value="planting">Planting</option><option value="irrigation">Irrigation</option><option value="fertilizer">Fertilizer application</option><option value="treatment">Crop treatment</option><option value="harvest">Harvest</option><option value="delivery">Delivery</option></select></label><label class="p-field">Batch / input reference (optional)<input name="batch" maxlength="120"/></label></div><label class="p-field">What happened?<textarea name="notes" required maxlength="2000" rows="3" placeholder="Record quantities with units, products used, field observations or delivery details."></textarea></label><button class="p-button" disabled={busy}>Save activity</button></form>
+<div class="p-table"><table><thead><tr><th>Date</th><th>Operation</th><th>Record</th></tr></thead><tbody>{#each records as r}<tr><td>{r.activity_date}</td><td>{r.kind}<small>{r.batch_reference}</small></td><td class="notes">{r.notes}</td></tr>{:else}<tr><td colspan="3">No activities recorded for this field yet.</td></tr>{/each}</tbody></table></div></section>
+<style>.p-section-heading{flex-wrap:wrap}form{margin:24px 0}.notes{white-space:pre-wrap;overflow-wrap:anywhere;max-width:600px}</style>

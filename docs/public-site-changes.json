@@ -1,0 +1,51 @@
+{
+  "archive": "C:\\Users\\Jeffrey Murungweni\\Desktop\\BeVisioneers Projects\\talazo-experimental-source-2026-11-01.zip",
+  "removedFiles": [
+    "src/lib/components/CropForm.svelte",
+    "src/lib/components/MonitorDashboard.svelte",
+    "src/lib/components/NodeDetails.svelte",
+    "src/lib/components/PortalIcon.svelte",
+    "src/lib/components/TrendChart.svelte",
+    "src/lib/portal/crops.js",
+    "src/lib/portal/format.js",
+    "src/lib/portal/insights.js",
+    "src/lib/portal/portal.css",
+    "src/lib/portal/types.d.ts",
+    "src/lib/server/nodes.js",
+    "src/lib/server/portal-request.js",
+    "src/lib/server/portal-store.js",
+    "src/lib/server/readings.js",
+    "src/routes/api/crops/+server.js",
+    "src/routes/api/crops/[cropId]/+server.js",
+    "src/routes/api/crops/[cropId]/observations/+server.js",
+    "src/routes/api/nodes/+server.js",
+    "src/routes/api/nodes/[deviceId]/+server.js",
+    "src/routes/api/readings/+server.js",
+    "src/routes/dashboard/+page.js",
+    "src/routes/dashboard/+page.svelte",
+    "src/routes/portal/+layout.js",
+    "src/routes/portal/+layout.svelte",
+    "src/routes/portal/+page.svelte",
+    "src/routes/portal/crops/+page.svelte",
+    "src/routes/portal/insights/+page.svelte",
+    "src/routes/portal/monitoring/+page.svelte",
+    "src/routes/portal/recommendations/+page.svelte",
+    "tests/ingestion.test.mjs",
+    "tests/portal-rules.test.mjs"
+  ],
+  "editedFiles": [
+    "src/routes/+layout.svelte",
+    "package.json"
+  ],
+  "preserved": [
+    "all public pages",
+    "src/app.css",
+    "static assets",
+    "firmware",
+    "data",
+    ".env",
+    "deployment-repo",
+    "historical documentation"
+  ],
+  "note": "Archive contains experimental source and original layout/package only, no env, firmware configuration or recorded data."
+}
