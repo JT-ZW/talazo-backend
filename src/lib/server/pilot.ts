@@ -47,10 +47,17 @@ export function origin() {
 /** No implicit credentials or user input are forwarded to provider operations. */
 export async function syncMonitoring(id:string) {
  const db=service(); const p=provider();
- const {data:m}=await db.from('talazo_monitoring').select('*,talazo_zones(*,talazo_farms(owner_id))').eq('id',id).single();
+ let {data:m}=await db.from('talazo_monitoring').select('*,talazo_zones(*,talazo_farms(owner_id))').eq('id',id).single();
  if(!m||m.environment!==p.environment||!m.provider_id||!['active','awaiting'].includes(m.status)) throw new Error('Monitoring is not ready in this environment.');
  const {data:a}=await db.from('talazo_accounts').select('status').eq('user_id',m.talazo_zones.talazo_farms.owner_id).single();
  if(!a||a.status==='suspended') throw new Error('Farmer is suspended.');
+ if(!p.testing){
+  const {reconcileMappedField}=await import('./provider-account');
+  await reconcileMappedField(m.provider_id);
+  const current=await db.from('talazo_monitoring').select('*,talazo_zones(*,talazo_farms(owner_id))').eq('id',id).single();
+  m=current.data;
+  if(!m||!['active','awaiting'].includes(m.status))throw new Error('Provider monitoring or boundary needs administrator review.');
+ }
  const bodies={FieldID:m.provider_id};
  const names=['getSensedDays','getSARDays','getAllIndexValues','getPresentWeather','getForecastWeather'] as const;
  const results=await Promise.allSettled(names.map(n=>p.call(n,bodies)));
@@ -62,10 +69,7 @@ export async function syncMonitoring(id:string) {
   if(r.status==='fulfilled') data.products[names[i]]={value:r.value,fetchedAt:new Date().toISOString()};
   else data.errors[names[i]]='Temporarily unavailable';
  }
- const stored=await db.from('talazo_observations').upsert({monitoring_id:id,data,fetched_at:new Date().toISOString()});
- if(stored.error) throw new Error('Could not save synchronized observations.');
  const sensed=sensedMap(data.products.getSensedDays?.value);
  const status=Object.keys(sensed).length?'active':'awaiting';
- const updated=await db.from('talazo_monitoring').update({status,last_sync:new Date().toISOString(),error:results.some(r=>r.status==='rejected')?'Some products are unavailable':null}).eq('id',id).in('status',['active','awaiting']);
- if(updated.error) throw new Error('Could not update synchronization status.');
+ await rpc(db,'talazo_commit_observations',{p_monitoring:id,p_setup:{boundary:m.talazo_zones.boundary,crop:m.talazo_zones.crop_code,sowing:m.talazo_zones.sowing_date},p_data:data,p_status:status,p_error:results.some(r=>r.status==='rejected')?'Some products are unavailable':null});
 }

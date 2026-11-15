@@ -10,5 +10,5 @@ while(!stopping){
   console.log(JSON.stringify({time:new Date().toISOString(),status:r.status,...(r.ok?await r.json():{})}));
  }catch{console.log(JSON.stringify({time:new Date().toISOString(),error:'Synchronization request failed; retrying later'}));}
  // Short interruptible waits keep graceful shutdown responsive.
- for(let i=0;i<360&&!stopping;i++)await new Promise(resolve=>setTimeout(resolve,10000));
+ for(let i=0;i<30&&!stopping;i++)await new Promise(resolve=>setTimeout(resolve,10000));
 }

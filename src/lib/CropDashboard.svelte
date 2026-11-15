@@ -1,6 +1,7 @@
 <script lang="ts">
  import {untrack} from 'svelte';
  import ImageExplorer from './ImageExplorer.svelte';
+ import ProviderConnection from './ProviderConnection.svelte';
  import ObservationTrend from './ObservationTrend.svelte';
  import {sensedMap,normalizeIndex} from './satellite.mjs';
  import {datedAdvisory,healthShares} from './advisory-model.mjs';
@@ -27,6 +28,7 @@
 {#if zone&&record}
  <div class="dashboard-heading"><div><p class="p-kicker">FIELD OBSERVATORY</p><h2>See your land. Follow the change.</h2></div><label class="p-field">Your monitored field<select value={zone?.id||''} onchange={e=>{selected=e.currentTarget.value;observationChoice='';advice=null;}}>{#each active as z}<option value={z.id}>{farm(z.farm_id)} / {z.name}</option>{/each}</select></label></div>
  {#key record.id}
+ <ProviderConnection {record}/>
  <div class="dashboard-observatory"><section class="dashboard-brief"><p class="p-kicker">{farm(zone.farm_id)}</p><h2>{zone.name}</h2><p>{zone.crop_entered_name||zone.crop_name} · {ha(Number(zone.area_sqm))} ha</p><div class="dashboard-index"><span>Vegetation index / NDVI</span><strong>{ndvi===null?'—':ndvi.toFixed(2)}</strong><small>Optical observation · {day(date)}</small></div><h3>Crop condition</h3>{#each shares.filter(s=>s.percent!==null) as share}<div class="dashboard-share"><span>{share.label}</span><strong>{share.percent}%</strong><progress max="100" value={share.percent??0} aria-label={share.label}></progress></div>{:else}<p class="p-caption">Condition shares appear when the dated advisory is available.</p>{/each}<p class="p-caption">Provider classifications and estimates. Colours indicate where to inspect; they do not confirm a pest or nutrient diagnosis.</p><a class="p-button lime" href={'/portal/health?field='+zone.id}>Review crop health ↗</a><a class="dashboard-weather" href={'/portal/weather?field='+zone.id}>Weather & rainfall forecast ↗</a></section><div class="dashboard-imagery"><ImageExplorer {record} {products} {date} bind:advisoryProduct={advice} onObservationChange={(value:string)=>observationChoice=value}/></div></div>
  <section class="p-card"><div class="p-section-heading"><div><p class="p-kicker">{zone.name} / OBSERVATION HISTORY</p><h2>Vegetation through the season</h2></div><a href={'/portal/analysis?field='+zone.id}>Reports & field records ↗</a></div><ObservationTrend series={products.getAllIndexValues?.value?.ndvi||{}}/></section>
  {/key}

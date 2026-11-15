@@ -8,6 +8,8 @@ The final isolated Chrome run passed six administrator pages, twelve farmer page
 
 ## Repeatable checks
 
+Inbound provider field discovery/reconciliation is described in [provider synchronization](PROVIDER-SYNCHRONIZATION.md). Its live account test leaves unassigned fields unassigned; database import/update tests use rolled-back fixtures only.
+
 - `npm test`: parsing, access models, date/sensor isolation, image validation, Google Maps lifecycle, crop names, area calculation, provider failures and explicit monitoring confirmations.
 - `npm run check` and `npm run build`: Svelte/TypeScript verification and the Node production bundle.
 - `node --env-file=.env scripts/test-hosted-pilot.mjs`: PostGIS boundaries, overlap, quotas, registration claims, RLS, suspension and admin escalation; all database changes roll back.

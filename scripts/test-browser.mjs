@@ -24,7 +24,7 @@ try{
  await page.getByRole('button',{name:'Show password',exact:true}).click();await expect(page.getByLabel('Password',{exact:true})).toHaveAttribute('type','text');
  await page.getByRole('button',{name:'Hide password',exact:true}).click();await expect(page.getByLabel('Password',{exact:true})).toHaveAttribute('type','password');
  await page.getByRole('button',{name:/Sign in to Talazo/}).click();await page.waitForURL('**/admin/overview');
- for(const section of ['overview','users','quota','requests','operations','crops']){await page.goto(base+'/admin/'+section);await expect(page.locator('main h1')).toBeVisible();checked.push('admin/'+section);}
+ for(const section of ['overview','users','quota','requests','operations','crops']){await page.goto(base+'/admin/'+section);await expect(page.locator('main h1')).toBeVisible();checked.push('admin/'+section);if(section==='operations'){await expect(page.getByRole('heading',{name:'Your Farmonaut account fields',exact:true})).toBeVisible();await expect(page.getByText('Unassigned · admin only',{exact:true}).first()).toBeVisible();await page.screenshot({path:'test-results/browser/provider-inventory-desktop.png',fullPage:true});}}
  await page.screenshot({path:'test-results/browser/admin-desktop.png',fullPage:true});
  for(const section of ['overview','satellite','health','pests','weeds','nutrients','irrigation','yield','soil','weather','analysis','account']){
   await page.goto(base+'/portal/'+section);await expect(page.locator('main h1')).toBeVisible();checked.push('portal/'+section);

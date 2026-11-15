@@ -38,8 +38,10 @@ export async function loadPortal(event:RequestEvent,admin=false) {
  const users=auth.isAdmin?await rows(auth.client,'talazo_accounts',['user_id']):[];
  const events=admin?await auth.client.from('talazo_events').select('*').order('created_at',{ascending:false}).limit(30):null;
  const insightZoneIds=activeInsightZoneIds(tables.talazo_farms,tables.talazo_zones,tables.talazo_monitoring,provider().environment);
+ const providerFields=admin?await rows(auth.client,'talazo_provider_fields',['provider_id']):[];
+ const providerStatus=admin?await auth.client.from('talazo_provider_sync').select('checked_at,error').eq('id',true).maybeSingle():null;
  return {admin,isAdmin:auth.isAdmin,section:event.params.section,name:auth.account?.name||'Talazo administrator',userId:auth.user.id,insightZoneIds,
-  tables,users,events:events?.data||[],period:month(),environment:provider().environment,initialZone:event.url.searchParams.get('field')||'',
+  tables,users,providerFields,providerStatus:providerStatus?.data||null,events:events?.data||[],period:month(),environment:provider().environment,initialZone:event.url.searchParams.get('field')||'',
   liveRegistrationIssue:tables.talazo_monitoring.some((m:any)=>m.environment==='live'&&m.status==='uncertain'),
   emailReady:Boolean(env.RESEND_API_KEY&&env.INVITATION_FROM),providerConfigured:Boolean(env.FARMONAUT_API_KEY),mapsConfigured:Boolean(publicEnv.PUBLIC_GOOGLE_MAPS_API_KEY)};
 }
@@ -53,6 +55,29 @@ async function sendInvitation(email:string,link:string,name:string) {
 }
 /** Form actions remain server-side, use SvelteKit same-origin checks, and never trust a submitted provider ID. */
 export const portalActions={
+ importProvider:async(event:RequestEvent)=>{
+  const a=await identity(event,true);const f=await event.request.formData();
+  try{
+   if(provider().testing)throw Error('Import is available only in live mode.');
+   const id=String(f.get('provider_id')||'');
+   const mapped=await a.client.from('talazo_monitoring').select('id').eq('environment','live').eq('provider_id',id).maybeSingle();
+   if(mapped.data)throw Error('This provider field is already connected. Use its review action instead.');
+   const result=await rpc(a.client,'talazo_apply_provider_field',{p_provider_id:id,p_farm:String(f.get('farm')||''),p_name:String(f.get('name')||'')||null});
+   let message='Existing Farmonaut field imported and assigned. No new paid field was created.';
+   try{await syncMonitoring(result.monitoring);}catch{message+=' Observations will load when the provider is ready; check the monitoring status.';}
+   return {message};
+  }catch(e){return fail(400,{message:safeMessage(e)});}
+ },
+ acceptProvider:async(event:RequestEvent)=>{
+  const a=await identity(event,true);const f=await event.request.formData();
+  try{
+   if(provider().testing)throw Error('Provider reconciliation requires live mode.');
+   const result=await rpc(a.client,'talazo_apply_provider_field',{p_provider_id:String(f.get('provider_id')||''),p_accept_boundary:true});
+   let message='Provider changes applied after boundary, ownership and hectare checks.';
+   try{await syncMonitoring(result.monitoring);}catch{message+=' Monitoring needs review or is waiting for provider data.';}
+   return {message};
+  }catch(e){return fail(400,{message:safeMessage(e)});}
+ },
  connection:async(event:RequestEvent)=>{
   await identity(event,true);
   const checks=await checkLiveConnection(farmonaut({key:env.FARMONAUT_API_KEY||'',testMode:'false'}));
