@@ -1,5 +1,17 @@
 # Validation and release checks
 
+## Reviewed on 16 November 2026
+
+The paid live integration passed an existing approved field refresh, dated NDVI imagery, area breakdowns, structured pest/weed/fertilizer/irrigation/soil/growth-and-yield advisories, NDRE/NDMI/SOC/radar-moisture images and PDF/advisory report links. Eight monitoring pages rendered, cached reads were reused, and unrelated-user and unavailable-date requests were denied. These checks did not register or change a paid provider field. The available observation was 13 November; a refresh is not evidence of a newer satellite acquisition.
+
+Live account discovery returned two fields with no metadata issues. One remains unassigned and admin-only as requested. A separate live weather test retrieved seven daily forecasts and verified unrelated-user denial.
+
+Hosted rollback tests passed spatial/overlap validation, quota reservation, duplicate registration prevention, suspension, RLS/admin escalation denial, provider metadata reconciliation and stale-observation rejection. Disposable HTTP checks passed activation/password validation, login/logout, field setup/request/activity, cross-user isolation, forged metadata, direct-write denial and CSRF checks.
+
+A browser review caught an early click before the password visibility toggle was hydrated. The toggle now remains disabled until its handler is ready. The production-build Chrome rerun passed six admin and twelve farmer pages, all map modes, coordinate import/area preview, drawing/finish, themed calendar, desktop/tablet/mobile overflow checks, mobile navigation and logout, with zero uncaught errors. Desktop dashboard and mobile pest screenshots were visually inspected. Test the production bundle separately from a running development build to avoid hot-reload navigation interference.
+
+All 41 unit tests, Svelte checks (zero errors/warnings), and the production build passed. Local browser captures stay ignored. The release requirements below remain open; these results do not establish full native Farmonaut feature parity, verified email/SMS delivery, or a deployed background scheduler.
+
 ## Reviewed on 15 November 2026
 
 The unit suite passed 38 tests. The hosted password, ownership/isolation and rollback-only quota/spatial checks passed. Browser-only desktop, tablet and mobile captures were reviewed; field selection, image-viewer contrast and inherited crop-sidebar/topic-navigation styles were corrected. The mobile navigation now has an explicit close control and Escape dismissal. No real administrator credentials/session or paid field boundary was changed.
@@ -17,6 +29,7 @@ Inbound provider field discovery/reconciliation is described in [provider synchr
 - `node --env-file=.env scripts/test-account-isolation.mjs`: disposable users, farm/field/request/activity flow, login/logout, unapproved/suspended access, seven-table RLS isolation, forged metadata, direct writes, CSRF and administrator pages. Fixtures are removed.
 - `node --env-file=.env scripts/test-browser.mjs`: isolated installed-Chrome desktop/tablet/mobile checks, page navigation, password toggles, actual imagery, image zoom, Google Maps modes, coordinate import, area preview, drawing and logout. Captures stay under ignored `test-results/`; the test does not save a field or submit a paid registration.
 - `node --env-file=.env scripts/test-live-monitoring.mjs`: authorized existing field selected through local `TALAZO_QA_ZONE_ID`. Checks provider imagery, distributions, advisory topics, cache reuse, date/ownership denial and report links. Does not create or alter provider fields.
+- `node --env-file=.env scripts/test-live-weather.mjs`: same approved live-zone selection; validates a real forecast and unrelated-user denial with a disposable identity. No provider field writes or emails. Supports a separate local production server through `ORIGIN`.
 - `node scripts/check-source-secrets.mjs`: tracked-file checks against credential patterns and, when available locally, actual `.env` credentials. Values are never printed.
 
 Historical test scripts that accept a real administrator email can invalidate its access links; do not run them as ordinary QA. Never run production write-lifecycle tests on a farmer's active field merely to exercise a button.
