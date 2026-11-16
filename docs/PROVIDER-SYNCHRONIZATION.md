@@ -33,3 +33,5 @@ API coverage is limited to the documented endpoints integrated by Talazo. Provid
 - `npm test` includes live-shape parsing, identity checks, contact minimization, invalid dates/geometry, placeholder rejection and explicit pause/expiry handling.
 - `scripts/test-provider-reconciliation.mjs` tests imports, deduplication, metadata changes, cache invalidation, boundary review and quotas plus inventory isolation/tamper denial inside a rolled-back transaction. It makes no provider calls.
 - `scripts/test-provider-account.mjs` uses a disposable administrator to read the live inventory and verify admin-only and same-origin controls. It does not import, assign or modify any actual provider field.
+
+`011_observation_reconciliation.sql` commits observations under a row lock and verifies the field boundary, crop and planting date still match the refresh request. A concurrent setup change rejects stale results instead of restoring invalidated imagery or advice. Only the server service role can call this function.
