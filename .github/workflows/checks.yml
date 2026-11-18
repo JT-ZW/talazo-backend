@@ -16,3 +16,6 @@ jobs:
       - run: node scripts/check-source-secrets.mjs
       - run: npm run check
       - run: npm run build
+      - run: npm run build
+        env:
+          VERCEL: '1'

@@ -1,6 +1,7 @@
 // Changes only a disposable QA identity's password. Never reads or changes the administrator's password/session.
 import {createClient} from '@supabase/supabase-js';import pg from 'pg';import {parse} from 'devalue';import {randomUUID} from 'node:crypto';import assert from 'node:assert/strict';
-const origin='http://127.0.0.1:5174';
+const origin=new URL(process.env.ORIGIN||'http://127.0.0.1:5174').origin;
+if(!['127.0.0.1','localhost'].includes(new URL(origin).hostname))throw Error('Password QA is local-only.');
 const client=createClient(process.env.SUPABASE_URL,process.env.SUPABASE_SERVICE_ROLE_KEY||process.env.SUPABASE_SECRET_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
 const db=new pg.Client({connectionString:process.env.SUPABASE_DB_URL});await db.connect();
 let id;const jar=new Map();
