@@ -29,7 +29,7 @@ try{
  for(const section of ['overview','satellite','health','pests','weeds','nutrients','irrigation','yield','soil','weather','analysis','account']){
   await page.goto(base+'/portal/'+section);await expect(page.locator('main h1')).toBeVisible();checked.push('portal/'+section);
   if(section==='overview'){
-   const img=page.locator('.image-stage img').first();await expect(img).toBeVisible({timeout:90000});await expect.poll(()=>img.evaluate(el=>el.complete&&el.naturalWidth>0)).toBe(true);
+   await page.getByRole('button',{name:'Original satellite image',exact:true}).first().click();const img=page.locator('.image-stage img').first();await expect(img).toBeVisible({timeout:90000});await expect.poll(()=>img.evaluate(el=>el.complete&&el.naturalWidth>0)).toBe(true);
    await page.screenshot({path:'test-results/browser/dashboard-desktop.png',fullPage:true});
    const plus=page.getByRole('button',{name:'Zoom in',exact:true});await plus.click();await expect(page.locator('.field-raster').first()).toHaveAttribute('style',/1.25/);await page.getByRole('button',{name:'Fit field',exact:true}).click();
   }
@@ -64,14 +64,14 @@ try{
  await expect(page.getByRole('button',{name:'Add more corners',exact:true})).toBeEnabled();
  checked.push('map modes, coordinate import, area preview, map drawing/finish; nothing saved');
  for(const [label,width,height] of [['tablet',1024,1000],['mobile',390,844]]){
-  await page.setViewportSize({width,height});await page.goto(base+'/portal/overview');await expect(page.locator('.image-stage img').first()).toBeVisible({timeout:90000});
+  await page.setViewportSize({width,height});await page.goto(base+'/portal/overview');await page.getByRole('button',{name:'Original satellite image',exact:true}).first().click();await expect(page.locator('.image-stage img').first()).toBeVisible({timeout:90000});
   const overflow=await page.evaluate(()=>({content:document.documentElement.scrollWidth,viewport:document.documentElement.clientWidth}));expect(overflow.content).toBeLessThanOrEqual(overflow.viewport+1);
   await page.screenshot({path:`test-results/browser/dashboard-${label}.png`,fullPage:true});
   if(label==='mobile'){
    await page.getByRole('button',{name:'Menu',exact:true}).click();await page.getByRole('button',{name:'Close navigation',exact:true}).click();
    await expect(page.locator('.p-sidebar')).toBeHidden();
    await page.getByRole('button',{name:'Menu',exact:true}).click();await expect(page.getByRole('navigation',{name:'Main navigation'})).toBeVisible();
-   await page.getByRole('link',{name:'Pests & diseases',exact:true}).first().click();await page.waitForURL('**/portal/pests');
+   await page.getByRole('link',{name:'Pests & diseases',exact:true}).first().click();await page.waitForURL('**/portal/pests');await page.getByRole('button',{name:'Original satellite image',exact:true}).first().click();
    await expect(page.locator('.image-stage img').first()).toBeVisible({timeout:90000});
    await expect.poll(()=>page.locator('.image-stage img').first().evaluate(el=>el.complete&&el.naturalWidth>0)).toBe(true);
    await page.screenshot({path:'test-results/browser/pests-mobile.png',fullPage:true});

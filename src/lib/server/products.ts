@@ -33,7 +33,7 @@ export async function providerProduct(client:Client,monitoring:any,date:string,p
    if(!zone.data)throw Error('Field boundary unavailable.');
    const result=await p.call('generate_geotif_file',{FieldID:monitoring.provider_id,SensedDay:date,ImageType:layer});
    const url=result?.URL||result?.url;
-   if(typeof url!=='string')throw Error('Provider did not return a GeoTIFF link.');
+   if(typeof url!=='string')throw Error('Mapped satellite data is unavailable for this observation. The original image is available separately; Talazo support must verify the provider georeferenced export.');
    value={...await georasterOverlay(await readProviderRaster(url),zone.data.boundary),layer,date,sample:p.testing};
   }else{
    const layer=product.slice(6);
