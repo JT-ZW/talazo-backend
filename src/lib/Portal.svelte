@@ -1,5 +1,6 @@
 <script lang="ts">
  import {imageDates} from './imagery.mjs';
+ import NavIcon from './NavIcon.svelte';
  import CropDashboard from './CropDashboard.svelte';
  import OperationsDashboard from './OperationsDashboard.svelte';
  import ProviderInventory from './ProviderInventory.svelte';
@@ -8,7 +9,8 @@
  import AlertCenter from './AlertCenter.svelte';
  import HistoryRequests from './HistoryRequests.svelte';
  import DatePicker from './DatePicker.svelte';
- import {untrack} from 'svelte';
+ import {untrack,onMount} from 'svelte';
+ let navigationReady=$state(false);onMount(()=>{navigationReady=true;});
  import {todayISO} from './calendar.mjs';
  import {enhance} from '$app/forms';
  import {feedbackForm} from '#lib/feedback.ts';
@@ -31,6 +33,10 @@
  const farmerNav=[['overview','Overview'],['farms','My farms'],['satellite','Satellite monitoring'],['weather','Weather'],...insightPages,['analysis','Analysis & reports'],['account','Account & support']];
  const adminNav=[['overview','Operations overview'],['users','Farmers & invitations'],['quota','Hectare allocations'],['requests','Monitoring requests'],['operations','Integration health'],['crops','Crops & analysis']];
  let nav=$derived(data.admin?adminNav:farmerNav);
+ const farmerGroups=[{label:'Workspace',ids:['overview','farms']},{label:'Field monitoring',ids:['satellite','weather']},{label:'Crop intelligence',ids:insightPages.map(([id])=>id)},{label:'Reports & support',ids:['analysis','account']}];
+ const adminGroups=[{label:'Workspace',ids:['overview']},{label:'People & capacity',ids:['users','quota']},{label:'Monitoring operations',ids:['requests','operations']},{label:'Intelligence',ids:['crops']}];
+ let navGroups=$derived(data.admin?adminGroups:farmerGroups);
+ function closeMenu(){menu=false;document.getElementById('portal-menu-toggle')?.focus();}
  let farms=$derived(data.tables.talazo_farms),zones=$derived(data.tables.talazo_zones),monitoring=$derived(data.tables.talazo_monitoring.filter((m:any)=>m.environment===data.environment));
  let insightPage=$derived(isInsightPage(data.section));
  let insightEnabled=$derived(Boolean(data.insightZoneIds?.length));
@@ -73,21 +79,22 @@
   for(const name of ['name','sowing','notes']){const input=element.querySelector<HTMLInputElement|HTMLTextAreaElement>(`[name="${name}"]`);if(input){input.value='';input.dispatchEvent(new Event('input',{bubbles:true}));}}
  }});
 </script>
-<svelte:window onkeydown={e=>{if(e.key==='Escape')menu=false;}}/>
+<svelte:window onkeydown={e=>{if(e.key==='Escape'&&menu)closeMenu();}}/>
 <svelte:head><title>{nav.find(([id])=>id===data.section)?.[1]} · Talazo</title><meta name="robots" content="noindex,nofollow"/></svelte:head>
 <a class="skip" href="#portal-content">Skip to content</a>
 <div class="p-shell">
  <aside id="portal-navigation" class="p-sidebar" class:open={menu}>
-  <button type="button" class="p-menu p-button subtle p-close-menu" aria-label="Close navigation" onclick={()=>menu=false}>Close menu</button>
+  <button type="button" class="p-menu p-button subtle p-close-menu" aria-label="Close navigation" onclick={closeMenu}>Close menu</button>
   <a class="p-logo" href={data.admin?'/admin/overview':'/portal/overview'}><img src="/images/talazo-logo-cropped.png" alt="Talazo Agritech"/></a>
-  <p class="p-kicker">{data.admin?'PLATFORM OPERATIONS':'YOUR GROWING SEASON'}</p>
-  <nav aria-label="Main navigation">{#each nav as [id,label],i}{#if !data.admin&&id==='health'}<p class="p-nav-group">CROP INTELLIGENCE</p>{/if}{#if !data.admin&&isInsightPage(id)&&!insightEnabled}<span class="p-nav-disabled" role="link" aria-disabled="true" aria-describedby="insight-activation-note"><span aria-hidden="true">{String(i+1).padStart(2,'0')}</span>{label}</span>{:else}<a class:current={data.section===id} aria-current={data.section===id?'page':undefined} href={`/${data.admin?'admin':'portal'}/${id}`} onclick={()=>menu=false}><span aria-hidden="true">{String(i+1).padStart(2,'0')}</span>{label}</a>{/if}{/each}</nav>
+  <div class="p-workspace-label"><span class="p-workspace-dot" aria-hidden="true"></span>{data.admin?'Administration':'Farmer workspace'}</div>
+  <nav aria-label="Main navigation">{#each navGroups as group,groupIndex}<div class="p-nav-section"><p class="p-nav-group" id={'nav-group-'+groupIndex}>{group.label}</p><ul aria-labelledby={'nav-group-'+groupIndex}>{#each nav.filter(([id])=>group.ids.includes(id)) as [id,label]}<li>{#if !data.admin&&isInsightPage(id)&&!insightEnabled}<span class="p-nav-disabled" role="link" aria-disabled="true" aria-describedby="insight-activation-note"><NavIcon name={id}/><span class="p-nav-label">{label}</span><span class="p-nav-lock"><NavIcon name="lock"/></span></span>{:else}<a class:current={data.section===id} aria-current={data.section===id?'page':undefined} href={`/${data.admin?'admin':'portal'}/${id}`} onclick={()=>menu=false}><NavIcon name={id}/><span class="p-nav-label">{label}</span>{#if data.section===id}<span class="p-nav-active-dot" aria-hidden="true"></span>{/if}</a>{/if}</li>{/each}</ul></div>{/each}</nav>
   {#if !data.admin&&!insightEnabled}<p id="insight-activation-note" class="p-nav-note">Crop pages unlock when a field has active satellite monitoring.</p>{/if}
-  {#if data.isAdmin}<a class="p-switch" href={data.admin?'/portal/overview':'/admin/overview'}>{data.admin?'Open farmer workspace':'Open administration'} ↗</a>{/if}
-  <div class="p-sidebar-foot"><span class="p-leaf" aria-hidden="true"></span><strong>Rooted in better decisions.</strong><p>Field intelligence.<br/>A clearer way forward.</p><form method="POST" action="?/signout" use:enhance={enhanced}><button class="p-button subtle">Sign out</button></form></div>
+  {#if data.isAdmin}<a class="p-switch" href={data.admin?'/portal/overview':'/admin/overview'}><NavIcon name="switch"/><span>{data.admin?'Open farmer workspace':'Open administration'}</span><span aria-hidden="true">&nearr;</span></a>{/if}
+  <div class="p-sidebar-foot"><p class="p-nav-brandline">Rooted in better decisions.</p><form method="POST" action="?/signout" use:enhance={enhanced}><button class="p-button subtle p-signout"><NavIcon name="logout"/>Sign out</button></form></div>
  </aside>
+ {#if menu}<button type="button" class="p-nav-backdrop" aria-label="Close navigation overlay" onclick={closeMenu}></button>{/if}
  <div class="p-body">
-  <header class="p-topbar"><button class="p-menu p-button subtle" aria-expanded={menu} onclick={()=>menu=!menu}>Menu</button><span>{data.admin?'Talazo administration':data.name}</span><div><span class="p-status">{data.environment==='test'?'Test environment':'Satellite monitoring'}</span><span class="p-avatar">{data.name.slice(0,1).toUpperCase()}</span></div></header>
+  <header class="p-topbar"><button id="portal-menu-toggle" disabled={!navigationReady} class="p-menu p-button subtle" aria-controls="portal-navigation" aria-expanded={menu} onclick={()=>menu=!menu}>Menu</button><span>{data.admin?'Talazo administration':data.name}</span><div><span class="p-status">{data.environment==='test'?'Test environment':'Satellite monitoring'}</span><span class="p-avatar">{data.name.slice(0,1).toUpperCase()}</span></div></header>
   <main id="portal-content" class="p-main">
    <div class="p-heading"><div><p class="p-kicker">TALAZO / {data.admin?'ADMINISTRATION':'FARM INTELLIGENCE'}</p><h1>{data.section==='overview'?(data.admin?'The whole picture.':'Your season, in focus.'):nav.find(([id])=>id===data.section)?.[1]}</h1><p>{data.admin?'Support your farmers. Keep every hectare accounted for.':'Understand your fields, follow change, and know where to look next.'}</p></div>{#if !data.admin&&data.section!=='farms'}<a class="p-button" href="/portal/farms">Manage my land <span aria-hidden="true">↗</span></a>{/if}</div>
    {#if data.environment==='test'}<div class="p-test"><strong>Test mode</strong> Provider results are samples, not observations of your farm. Test and live records are kept separate.</div>{/if}

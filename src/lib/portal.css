@@ -27,3 +27,22 @@
 .p-nav-note{font-size:10px;line-height:1.6;padding:4px 14px;color:#65745f}
 @media(max-width:760px){.p-sidebar{z-index:1000;height:100dvh;max-height:100dvh}}
 .p-sidebar>.p-close-menu{align-self:flex-end;margin-bottom:16px;min-height:38px}
+/* Shared farmer and administrator navigation */
+.p-sidebar{padding:26px 16px 20px;background:#f0f3e9;scrollbar-width:thin;scrollbar-color:#bdcbb3 transparent}
+.p-sidebar .p-logo{margin:0 12px 20px}.p-sidebar .p-logo img{width:188px;display:block}
+.p-workspace-label{display:flex;align-items:center;gap:8px;padding:11px 12px;margin-bottom:20px;border:1px solid #dbe3d1;border-radius:8px;background:#fafbf5;color:#486046;font-size:11px;font-weight:600}
+.p-workspace-dot{width:6px;height:6px;border-radius:50%;background:#729747;flex-shrink:0}
+.p-sidebar nav{gap:20px}.p-sidebar nav .p-nav-group{font-size:9px;line-height:1.4;letter-spacing:.12em;text-transform:uppercase;margin:0 12px 8px;color:#687a60;font-weight:700}
+.p-sidebar nav ul{list-style:none;padding:0;margin:0;display:grid;gap:3px}.p-sidebar nav li{min-width:0}
+.p-sidebar nav a,.p-sidebar .p-nav-disabled{min-height:44px;align-items:center;gap:11px;padding:11px 12px;border-radius:8px;font-size:12px;line-height:1.45;transition:background-color .15s,color .15s;position:relative}
+.p-sidebar nav a{border:1px solid transparent;color:#294b39;background:transparent}
+.p-sidebar nav a:hover{background:#e3ebd8;border-color:#d7e1cb}.p-sidebar nav a.current{background:#123f32;border-color:#123f32;color:#fffef4;box-shadow:0 2px 4px #123f3210}.p-sidebar nav a.current:hover{background:#1c503d}
+.p-sidebar nav a .p-nav-label,.p-sidebar .p-nav-disabled .p-nav-label{font-size:12px;opacity:1;flex:1;min-width:0}
+.p-nav-active-dot{width:5px;height:5px;background:#cce592;border-radius:50%;margin-left:auto;flex-shrink:0;opacity:1!important}
+.p-sidebar .p-nav-disabled{opacity:1;color:#82907b;border:1px solid transparent;cursor:not-allowed}.p-sidebar .p-nav-lock{margin-left:auto;opacity:.7}.p-nav-lock svg{width:13px;height:13px}
+.p-sidebar nav a:focus-visible{outline:2px solid #ac7b29;outline-offset:2px}.p-nav-note{padding:10px 12px 0;font-size:10px;margin-bottom:0}
+.p-sidebar .p-switch{display:flex;align-items:center;gap:10px;padding:13px 12px;margin:22px 0 0;border-top:1px solid #d8e1cf;font-size:11px;line-height:1.4;color:#365c43;border-radius:0}.p-switch>span:last-child{margin-left:auto}.p-switch:hover{background:#e3ebd8}
+.p-sidebar-foot{padding:18px 12px 0;margin-top:auto}.p-sidebar-foot .p-nav-brandline{font-size:10px;color:#738269;margin:20px 0 12px}.p-sidebar-foot .p-signout{display:flex;width:100%;gap:10px;justify-content:flex-start;min-height:42px;font-size:12px;border-color:#d1dcc6;background:#fafbf4}
+.p-nav-backdrop{display:none}
+@media(max-width:760px){.p-sidebar{width:min(290px,88vw);padding:20px 16px}.p-sidebar>.p-close-menu{margin-bottom:14px;font-size:11px}.p-sidebar nav{gap:18px}.p-sidebar .p-switch{margin-top:20px}.p-nav-backdrop{display:block;position:fixed;inset:0;z-index:990;background:#0d2e2466;border:0;border-radius:0;cursor:default;backdrop-filter:blur(2px)}.p-sidebar nav a,.p-sidebar .p-nav-disabled{min-height:46px}.p-sidebar-foot{margin-top:18px}}
+@media(prefers-reduced-motion:reduce){.p-sidebar nav a{transition:none}}
