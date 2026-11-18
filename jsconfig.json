@@ -1,7 +1,10 @@
 {
-  "extends": "./.svelte-kit/tsconfig.json",
+  "extends": "$app/tsconfig",
+  "include": ["src", "tests", "*.js"],
+  "exclude": ["src/service-worker"],
   "compilerOptions": {
     "allowJs": true,
+    "types": ["$app/types", "node", "google.maps"],
     "checkJs": true,
     "moduleResolution": "bundler",
     "resolveJsonModule": true,

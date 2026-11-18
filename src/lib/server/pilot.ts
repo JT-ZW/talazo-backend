@@ -1,10 +1,11 @@
-import {env} from '$env/dynamic/private';
+import * as env from '$app/env/private';
 import {createClient} from '@supabase/supabase-js';
 import {error,redirect} from '@sveltejs/kit';
 import type {RequestEvent} from '@sveltejs/kit';
 import {createSupabase} from './supabase';
 import {farmonaut} from './farmonaut.mjs';
 import {sensedMap} from '../satellite.mjs';
+import {ndviDrop} from '../alerts.mjs';
 
 export const provider=()=>farmonaut({key:env.FARMONAUT_API_KEY||'',testMode:env.FARMONAUT_TEST_MODE||'true'});
 export function service() {
@@ -72,4 +73,13 @@ export async function syncMonitoring(id:string) {
  const sensed=sensedMap(data.products.getSensedDays?.value);
  const status=Object.keys(sensed).length?'active':'awaiting';
  await rpc(db,'talazo_commit_observations',{p_monitoring:id,p_setup:{boundary:m.talazo_zones.boundary,crop:m.talazo_zones.crop_code,sowing:m.talazo_zones.sowing_date},p_data:data,p_status:status,p_error:results.some(r=>r.status==='rejected')?'Some products are unavailable':null});
+ const preference=await db.from('talazo_alert_preferences').select('enabled,ndvi_drop').eq('user_id',m.talazo_zones.talazo_farms.owner_id).maybeSingle();
+ if(preference.error)throw Error('Alert preferences could not be checked.');
+ if(preference.data?.enabled&&results[0].status==='fulfilled'&&results[2].status==='fulfilled'){
+  const alert=ndviDrop(data.products,Number(preference.data.ndvi_drop));
+  if(alert){const saved=await db.from('talazo_alerts').upsert({monitoring_id:id,observed_on:alert.date,rule:'ndvi_drop',data:alert},{onConflict:'monitoring_id,observed_on,rule',ignoreDuplicates:true});if(saved.error)throw Error('Field alert could not be retained.');}
+ }
+ const dates=Object.keys(sensed).filter(d=>/^\d{8}$/.test(d)).map(d=>d.slice(0,4)+'-'+d.slice(4,6)+'-'+d.slice(6));
+ if(dates.length){const saved=await db.from('talazo_history_requests').update({state:'available'}).eq('monitoring_id',id).in('requested_on',dates).neq('state','available');if(saved.error)throw Error('History status could not be updated.');}
+ return {complete:results.every(r=>r.status==='fulfilled')};
 }

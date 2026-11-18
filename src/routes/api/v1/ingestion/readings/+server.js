@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { json } from '@sveltejs/kit';
-import { deviceId, deviceKey, mongoEnabled, readings } from '$lib/server/mongo';
+import { deviceId, deviceKey, mongoEnabled, readings } from '#lib/server/mongo.js';
 
 const hash = (/** @type {string} */ value) => createHash('sha256').update(value).digest();
 

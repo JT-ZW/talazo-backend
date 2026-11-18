@@ -1,8 +1,8 @@
 <script>
  import {goto} from '$app/navigation';
- import {workspaces,labels,farms,fields,devices,programs,alerts,tasks,metrics,scopedFarms} from '$lib/client-catalog';
- import Chart from '$lib/ClientChart.svelte';
- import PilotMonitoring from '$lib/PilotMonitoring.svelte';
+ import {workspaces,labels,farms,fields,devices,programs,alerts,tasks,metrics,scopedFarms} from '#lib/client-catalog.js';
+ import Chart from '#lib/ClientChart.svelte';
+ import PilotMonitoring from '#lib/PilotMonitoring.svelte';
  let {data}=$props();
  let workspace=$derived(data.workspace),section=$derived(data.section),config=$derived(workspaces[workspace]);
  let search=$state('');

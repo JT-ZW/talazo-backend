@@ -1,5 +1,5 @@
 import {createServerClient} from '@supabase/ssr';
-import {env} from '$env/dynamic/public';
+import * as env from '$app/env/public';
 /** Factory only; not called in sample mode. Never uses a service-role key.
  * @param {import('@sveltejs/kit').Cookies} cookies */
 export function createSupabase(cookies){

@@ -1,5 +1,5 @@
 import {json} from '@sveltejs/kit';
-import {identity,provider,rpc,syncMonitoring} from '$lib/server/pilot';
+import {identity,provider,rpc,syncMonitoring} from '#lib/server/pilot.ts';
 export async function POST(event:import('@sveltejs/kit').RequestEvent){
  if(event.request.headers.get('origin')!==event.url.origin)return json({message:'Same-origin request required.'},{status:403});
  const a=await identity(event);

@@ -1,6 +1,6 @@
 import {fail,redirect} from '@sveltejs/kit';
-import {identity} from '$lib/server/pilot';
-import {passwordError} from '$lib/auth-errors.mjs';
+import {identity} from '#lib/server/pilot.ts';
+import {passwordError} from '#lib/auth-errors.mjs';
 export const load=async(event:import('@sveltejs/kit').RequestEvent)=>{const a=await identity(event);return {email:a.user.email};};
 export const actions={default:async(event:import('@sveltejs/kit').RequestEvent)=>{
  const a=await identity(event);const f=await event.request.formData();const password=String(f.get('password')||'');

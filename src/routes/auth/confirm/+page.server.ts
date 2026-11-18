@@ -1,5 +1,5 @@
 import {fail,redirect} from '@sveltejs/kit';
-import {createSupabase} from '$lib/server/supabase';
+import {createSupabase} from '#lib/server/supabase.js';
 export const load=({url}:import('@sveltejs/kit').RequestEvent)=>({token:url.searchParams.get('token_hash')||'',type:url.searchParams.get('type')||''});
 export const actions={default:async({request,cookies}:import('@sveltejs/kit').RequestEvent)=>{
  const f=await request.formData();const type=String(f.get('type'));

@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { deviceId, deviceKey, mongoEnabled, mongoDatabase } from '$lib/server/mongo';
+import { deviceId, deviceKey, mongoEnabled, mongoDatabase } from '#lib/server/mongo.js';
 
 export async function GET() {
   let connected = false;

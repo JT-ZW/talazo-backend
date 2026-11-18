@@ -1,7 +1,7 @@
 <script>
  import {goto, invalidateAll} from '$app/navigation';
- import {workspaces,labels,farms,fields,devices,programs,alerts,tasks,metrics,scopedFarms} from '$lib/catalog';
- import Chart from '$lib/Chart.svelte';
+ import {workspaces,labels,farms,fields,devices,programs,alerts,tasks,metrics,scopedFarms} from '#lib/catalog.js';
+ import Chart from '#lib/Chart.svelte';
  let {data}=$props();
  let workspace=$derived(data.workspace),section=$derived(data.section),config=$derived(workspaces[workspace]);
  let search=$state('');

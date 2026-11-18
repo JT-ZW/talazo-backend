@@ -1,11 +1,11 @@
 import { error } from '@sveltejs/kit';
-import { dev } from '$app/environment';
-import { env as privateEnv } from '$env/dynamic/private';
-import { env } from '$env/dynamic/public';
+import { dev } from '$app/env';
+import * as privateEnv from '$app/env/private';
+import * as env from '$app/env/public';
 
-/** @type {import('@sveltejs/kit').Handle} */
+/** @type {import('@sveltejs/kit/hooks').Handle} */
 export async function handle({ event, resolve }) {
-  const path = event.route.id ?? '';
+  const path = event.url.pathname;
   // Enhanced form requests can ask for JSON, so enforce Origin independently
   // of content negotiation. Worker endpoints use their own secret checks.
   const accountAction = ['/login','/activate','/auth/confirm'].includes(event.url.pathname)

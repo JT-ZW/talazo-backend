@@ -2,7 +2,9 @@
  import {defaultLayer,imageLayers,imageDates,imageContext} from './imagery.mjs';
  import {normalizeIndex} from './satellite.mjs';
  import IndexAreaChart from './IndexAreaChart.svelte';
- let {record,products,date,section='satellite',advisoryProduct=$bindable(null),onObservationChange}:{record:any,products:any,date:string,section?:string,advisoryProduct?:any,onObservationChange?:(date:string)=>void}=$props();
+ import GeoreferencedMap from './GeoreferencedMap.svelte';
+ let mappedOpen=$state(false);
+ let {record,products,date,boundary,section='satellite',advisoryProduct=$bindable(null),onObservationChange}:{record:any,products:any,date:string,boundary?:any,section?:string,advisoryProduct?:any,onObservationChange?:(date:string)=>void}=$props();
  let chosenLayer=$state(''),chosenDate=$state(''),nonce=$state(0),result=$state<any>(null),loading=$state(false),message=$state(''),assetError=$state(false);
  let layer=$derived(chosenLayer||defaultLayer(section)),radar=$derived(['rvi','rsm'].includes(layer));
  let dates=$derived(imageDates(products[radar?'getSARDays':'getSensedDays']?.value,radar));
@@ -70,6 +72,7 @@
  {#if result?.advisory?.state==='pending'&&!loading}<p class="image-warning" role="status">An advisory request is still processing. Reload this view shortly.</p>{/if}
  {#if message}<p class="image-warning" role="status">{message}</p>{/if}
 </section>
+<details class="mapped-view" bind:open={mappedOpen}><summary>Mapped imagery on Google Maps</summary>{#if mappedOpen}<GeoreferencedMap {record} {boundary} date={imageDate} {layer}/>{/if}</details>
 {#if layer!=='tci'}<IndexAreaChart product={result?.breakdown} {layer}/>{/if}
 <style>
  .header-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:end}.image-explorer:fullscreen{overflow:auto;border-radius:0;width:100%;height:100%;background:#123d35}.image-explorer:fullscreen .image-stage{height:calc(100vh - 310px);min-height:300px}.compare-controls{display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding:15px 22px;border-bottom:1px solid #41624e;font-size:11px;color:#d0dfbf}.compare-controls label{display:flex;align-items:center;gap:9px}.compare-controls input{accent-color:#b6d189;width:16px;height:16px}.compare-controls select{background:#eaf0dc;color:#183f32;border-radius:6px;padding:7px;border:0;font:inherit}.compare-controls>span{font-size:10px;color:#a5bea2}.comparing .field-raster.half{right:calc(50% + 16px);left:20px}.comparison-panel{position:absolute;inset:0 0 0 50%;border-left:1px solid #8ca17a60;background:#092b29;overflow:hidden;pointer-events:none}.comparison-raster{position:absolute;inset:32px 20px;transform-origin:center}.comparison-raster img{width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 8px 24px #0006)}.compare-label{position:absolute;top:18px;left:15px;font-size:10px;background:#062c28dd;padding:12px;z-index:1;color:#d5e0c9}.compare-state{position:absolute;inset:80px 24px 24px;display:grid;place-content:center;text-align:center;font-size:12px;color:#c2d2b7}.comparing .image-badge{max-width:calc(50% - 30px)}@media(max-width:760px){.header-actions{gap:5px}.header-actions button{font-size:10px;padding:7px}.comparison-raster{inset:65px 8px 25px}.comparing .field-raster.half{left:8px;right:calc(50% + 8px)}.compare-label{font-size:8px;left:8px}.comparing .image-badge{font-size:8px;left:8px;padding:9px}.comparing .image-badge small{font-size:8px}}

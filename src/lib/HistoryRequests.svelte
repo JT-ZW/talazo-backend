@@ -1,0 +1,9 @@
+<script lang="ts">
+ import {enhance} from '$app/forms';import DatePicker from './DatePicker.svelte';
+ let {data,enhanced,busy}:{data:any,enhanced:any,busy:boolean}=$props();
+</script>
+<section class="p-card"><p class="p-kicker">OBSERVATION HISTORY</p><h2>Build a longer view of the field.</h2><p>Existing observations are available in the image timeline and trends. Backfill requests may consume additional provider visit allowance and need administrator approval.</p>
+ {#if data.admin}<form method="POST" action="?/requestHistory" use:enhance={enhanced} class="p-form"><label class="p-field">Active field<select name="monitoring" required><option value="">Choose a field</option>{#each data.tables.talazo_monitoring.filter((m:any)=>m.status==='active'&&m.environment===data.environment) as m}<option value={m.id}>{data.tables.talazo_zones.find((z:any)=>z.id===m.zone_id)?.name}</option>{/each}</select></label><DatePicker name="date" label="Historical observation date" min="2017-01-01" required/><label class="p-caption"><input type="checkbox" name="confirmed" value="true" required/> I have checked the provider allowance and approve this single-date request.</label><button class="p-button" disabled={busy}>Request historical processing</button></form>{/if}
+ {#each data.historyRequests||[] as item}<p>{data.tables.talazo_zones.find((z:any)=>data.tables.talazo_monitoring.some((m:any)=>m.id===item.monitoring_id&&m.zone_id===z.id))?.name} · {item.requested_on} · {item.state}</p>{/each}
+</section>
+<style>.p-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;align-items:end}.p-form>label.p-caption{grid-column:1/-1;line-height:1.7}.p-form>label.p-caption input{width:auto}.p-form>button{justify-self:start}@media(max-width:640px){.p-form{grid-template-columns:1fr}}</style>

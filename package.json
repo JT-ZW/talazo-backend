@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5174",
+    "dev:local": "node --env-file=.env scripts/local-runtime.mjs",
+    "start": "node build/index.js",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4174",
     "check": "svelte-kit sync && svelte-check --tsconfig ./jsconfig.json",
@@ -14,17 +16,18 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.65.1",
-    "@sveltejs/adapter-node": "^5.0.0",
-    "@sveltejs/kit": "^2.0.0",
-    "@sveltejs/vite-plugin-svelte": "^6.0.0",
+    "@sveltejs/adapter-node": "^6.0.4",
+    "@sveltejs/kit": "^3.3.1",
+    "@sveltejs/vite-plugin-svelte": "^7.0.0",
     "@types/google.maps": "^3.66.10",
     "@types/node": "^24.19.2",
     "@types/pg": "^8.23.1",
+    "@types/pngjs": "^6.0.5",
     "pg": "^8.23.1",
-    "svelte": "^5.0.0",
-    "svelte-check": "^4.0.0",
-    "typescript": "^5.0.0",
-    "vite": "^7.0.0"
+    "svelte": "^5.57.1",
+    "svelte-check": "^4.7.8",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.12"
   },
   "engines": {
     "node": "24.x"
@@ -32,6 +35,11 @@
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.116.0",
-    "mongodb": "^7.1.0"
+    "geotiff": "^3.0.5",
+    "mongodb": "^7.1.0",
+    "pngjs": "^7.0.0"
+  },
+  "imports": {
+    "#lib/*": "./src/lib/*"
   }
 }

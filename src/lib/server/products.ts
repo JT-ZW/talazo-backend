@@ -2,6 +2,7 @@ import {provider,rpc,service} from './pilot';
 import type {createSupabase} from './supabase';
 import {verifyProviderImage} from './provider-image.mjs';
 import {indexDistribution,datedAdvisory} from '../advisory-model.mjs';
+import {georasterOverlay,readProviderRaster} from './georaster.mjs';
 type Client=ReturnType<typeof createSupabase>;
 export async function providerProduct(client:Client,monitoring:any,date:string,product:string){
  const claim=await rpc(client,'talazo_claim_product',{p_monitoring:monitoring.id,p_product:product,p_date:date});
@@ -26,6 +27,14 @@ export async function providerProduct(client:Client,monitoring:any,date:string,p
    const result=await p.call('getFieldIndexBreakdown',{FieldID:monitoring.provider_id,SensedDay:date,ImageType:layer});
    if(!indexDistribution(result,layer).length)throw new Error('The provider did not return a usable index area breakdown.');
    value={bins:result,layer,date,sample:p.testing};
+  }else if(product.startsWith('overlay:')){
+   const layer=product.slice(8);
+   const zone=await client.from('talazo_zones').select('boundary').eq('id',monitoring.zone_id).single();
+   if(!zone.data)throw Error('Field boundary unavailable.');
+   const result=await p.call('generate_geotif_file',{FieldID:monitoring.provider_id,SensedDay:date,ImageType:layer});
+   const url=result?.URL||result?.url;
+   if(typeof url!=='string')throw Error('Provider did not return a GeoTIFF link.');
+   value={...await georasterOverlay(await readProviderRaster(url),zone.data.boundary),layer,date,sample:p.testing};
   }else{
    const layer=product.slice(6);
    const result=await p.call('getFieldImage',{FieldID:monitoring.provider_id,SensedDay:date,ImageType:layer,ColorMap:'1'});

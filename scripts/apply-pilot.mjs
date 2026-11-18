@@ -4,7 +4,7 @@ const connectionString=process.env.SUPABASE_DB_URL;
 if(!connectionString)throw new Error('Add SUPABASE_DB_URL to your local .env; its value is never printed.');
 const db=new pg.Client({connectionString});
 const file=process.argv[2]||'002_satellite.sql';
-if(!['002_satellite.sql','003_monitoring_lifecycle.sql','004_field_workflows.sql','005_crop_standards.sql','006_crop_catalog_expansion.sql','007_provider_products.sql','008_monitoring_workspace.sql','009_least_privilege.sql','010_provider_reconciliation.sql','011_observation_reconciliation.sql'].includes(file))throw new Error('Unknown pilot migration');
+if(!/^0(0[2-9]|1[0-6])_[a-z_]+\.sql$/.test(file))throw new Error('Unknown pilot migration');
 try{
  await db.connect();
  const existing=await db.query("select to_regclass('public.talazo_accounts') as present");

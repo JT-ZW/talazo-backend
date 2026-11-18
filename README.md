@@ -21,6 +21,8 @@ npm run dev
 
 Open http://127.0.0.1:5174. Configure both `PUBLIC_SUPABASE_URL` and server-only `SUPABASE_URL`, the publishable and service keys, and `SUPABASE_DB_URL` for operator migrations. Use `FARMONAUT_TEST_MODE=true` for sample responses; live mode requires an authorized paid account and approved field mapping.
 
+For the web app and automatic satellite polling together, use `npm run dev:local` instead of `npm run dev` after stopping the older dev process. See [local satellite workflows and checks](docs/LOCAL-DEVELOPMENT-DELIVERY.md) for field/season edits, mapped imagery, history, CSV exports, in-app alerts and the later Vercel release gates.
+
 Apply the additive files under `supabase/pilot/` in numeric order using `node --env-file=.env scripts/apply-pilot.mjs <filename.sql>` against the intended database. The pilot expects the base platform schema, including `platform_admins` and `profiles`; review `supabase/migrations/001_foundation.sql` before provisioning a new database. Do not run historical migrations blindly on an existing database.
 
 To bootstrap an administrator, inspect `scripts/bootstrap-admin.mjs` and supply the intended email as its argument. It creates a private activation link locally; rerunning for an existing administrator can invalidate earlier links. Do not use it during ordinary QA.

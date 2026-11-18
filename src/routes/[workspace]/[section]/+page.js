@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { workspaces } from '$lib/client-catalog';
+import { workspaces } from '#lib/client-catalog.js';
 
 /** @type {import('./$types').PageLoad} */
 export function load({ params }) {

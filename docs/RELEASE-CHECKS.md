@@ -39,3 +39,8 @@ Historical test scripts that accept a real administrator email can invalidate it
 Configure the deployed HTTPS origin, Auth redirect allowlist, verified SMTP, administrator MFA, Google Maps browser restrictions, backup restore and error/uptime monitoring. Verify invitation/recovery delivery using an authorized recipient. Deploy and monitor the satellite scheduler or verified webhook; a script in source control is not a deployed scheduler.
 
 SMS/email stress notifications, delivery retries/consent and the complete provider write lifecycle remain unverified release work. Two-observation comparison needs multiple actual observation dates. Provider estimates require field validation; passing software checks does not validate agronomic ground truth or imply complete Farmonaut feature parity.
+# Reviewed on 18 November 2026
+
+Local satellite development results and remaining limits are recorded in [local development delivery](LOCAL-DEVELOPMENT-DELIVERY.md). The final production bundle passed 48 unit tests, zero-error/zero-warning Svelte checks, a build, 18 browser pages with zero uncaught errors, disposable account isolation and the sample field-change approval/archive/alert/export flow. Migrations 012–016 are applied. Live worker field/inventory reads succeeded. Actual GeoTIFF retrieval timed out; live overlay alignment remains unverified. Paid field edits and historical requests were not exercised against active farms. External stress delivery remains off because no SMS provider or verified sender is configured.
+
+Production dependencies audit clean. Development-only transitive picomatch advisories remain without an upstream patch; see the linked delivery note. Vercel deployment is deferred.

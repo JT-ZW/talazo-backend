@@ -1,7 +1,7 @@
 <script lang="ts">
  import {onMount} from 'svelte';import {goto} from '$app/navigation';
- import {createBrowserClient} from '@supabase/ssr';import {env} from '$env/dynamic/public';
- import AuthShell from '$lib/AuthShell.svelte';
+ import {createBrowserClient} from '@supabase/ssr';import * as env from '$app/env/public';
+ import AuthShell from '#lib/AuthShell.svelte';
  let message=$state('Confirming your secure access link…');
  onMount(()=>{
   async function activate(){

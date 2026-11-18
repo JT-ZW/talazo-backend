@@ -1,7 +1,7 @@
 import {fail,redirect,error} from '@sveltejs/kit';
 import type {RequestEvent} from '@sveltejs/kit';
-import {env} from '$env/dynamic/private';
-import {env as publicEnv} from '$env/dynamic/public';
+import * as env from '$app/env/private';
+import * as publicEnv from '$app/env/public';
 import {identity,rpc,hectares,month,service,origin,provider,syncMonitoring,safeMessage} from './pilot';
 import {sensedMap} from '../satellite.mjs';
 import {weatherPoint,weatherDays} from '../weather.mjs';
@@ -13,6 +13,7 @@ import {imageDates,imageLayers} from '../imagery.mjs';
 import {providerProduct} from './products';
 import {createSupabase} from './supabase';
 import {monitoringConfirmed} from './monitoring-confirmation.mjs';
+import {applyFieldChange} from './field-changes';
 
 // Fetch successive RLS-scoped pages in stable primary-key order. A silent
 // 500-row limit made portfolio totals and admin queues incomplete at scale.
@@ -40,8 +41,13 @@ export async function loadPortal(event:RequestEvent,admin=false) {
  const insightZoneIds=activeInsightZoneIds(tables.talazo_farms,tables.talazo_zones,tables.talazo_monitoring,provider().environment);
  const providerFields=admin?await rows(auth.client,'talazo_provider_fields',['provider_id']):[];
  const providerStatus=admin?await auth.client.from('talazo_provider_sync').select('checked_at,error').eq('id',true).maybeSingle():null;
+ const jobs=admin?await rows(auth.client,'talazo_jobs',['name']):[];
+ const changes=(await rows(auth.client,'talazo_field_changes')).filter(c=>tables.talazo_monitoring.some((m:any)=>m.id===c.monitoring_id&&m.environment===provider().environment));
+ const alerts=await rows(auth.client,'talazo_alerts');
+ const historyRequests=await rows(auth.client,'talazo_history_requests');
+ const alertPreference=await auth.client.from('talazo_alert_preferences').select('enabled,ndvi_drop').eq('user_id',auth.user.id).maybeSingle();
  return {admin,isAdmin:auth.isAdmin,section:event.params.section,name:auth.account?.name||'Talazo administrator',userId:auth.user.id,insightZoneIds,
-  tables,users,providerFields,providerStatus:providerStatus?.data||null,events:events?.data||[],period:month(),environment:provider().environment,initialZone:event.url.searchParams.get('field')||'',
+  tables,users,jobs,changes,alerts,historyRequests,alertPreference:alertPreference.data,providerFields,providerStatus:providerStatus?.data||null,events:events?.data||[],period:month(),environment:provider().environment,initialZone:event.url.searchParams.get('field')||'',
   liveRegistrationIssue:tables.talazo_monitoring.some((m:any)=>m.environment==='live'&&m.status==='uncertain'),
   emailReady:Boolean(env.RESEND_API_KEY&&env.INVITATION_FROM),providerConfigured:Boolean(env.FARMONAUT_API_KEY),mapsConfigured:Boolean(publicEnv.PUBLIC_GOOGLE_MAPS_API_KEY)};
 }
@@ -55,6 +61,34 @@ async function sendInvitation(email:string,link:string,name:string) {
 }
 /** Form actions remain server-side, use SvelteKit same-origin checks, and never trust a submitted provider ID. */
 export const portalActions={
+ alertPreferences:async(event:RequestEvent)=>{const a=await identity(event);const f=await event.request.formData();try{await rpc(a.client,'talazo_set_alert_preferences',{p_enabled:f.get('enabled')==='true',p_threshold:Number(f.get('threshold'))});return {message:'In-app alert preferences saved.'};}catch(e){return fail(400,{message:safeMessage(e)});}},
+ acknowledgeAlert:async(event:RequestEvent)=>{const a=await identity(event);const f=await event.request.formData();try{await rpc(a.client,'talazo_acknowledge_alert',{p_id:f.get('alert')});return {message:'Alert marked reviewed.'};}catch(e){return fail(400,{message:safeMessage(e)});}},
+ requestHistory:async(event:RequestEvent)=>{
+  const a=await identity(event,true);const f=await event.request.formData();let claimed:string|undefined;
+  try{if(f.get('confirmed')!=='true')throw Error('Confirm the provider history allowance before requesting processing.');const p=provider(),id=String(f.get('monitoring')),day=String(f.get('date'));
+   const monitoring=await a.client.from('talazo_monitoring').select('*').eq('id',id).single();const m=monitoring.data;if(!m||m.environment!==p.environment||m.status!=='active')throw Error('Active field required.');
+   const obs=await a.client.from('talazo_observations').select('data').eq('monitoring_id',id).single();if(imageDates(obs.data?.data?.products?.getSensedDays?.value).includes(day.replaceAll('-','')))throw Error('That date is already available; select it in the imagery timeline.');
+   claimed=await rpc(a.client,'talazo_claim_history',{p_monitoring:id,p_date:day});
+   const result=await p.call('requestPreviousSatelliteData',{FieldID:m.provider_id,RequestedDate:day.replaceAll('-','')});if(typeof result!=='string'||!/request|success|process|minute/i.test(result))throw Error('Provider confirmation was not recognized.');
+   const saved=await service().from('talazo_history_requests').update({state:'processing'}).eq('id',claimed);if(saved.error)throw Error('History confirmation could not be saved.');
+   return {message:'Historical processing requested. Dates become selectable after the provider supplies them.'};
+  }catch(e){if(claimed)await service().from('talazo_history_requests').update({state:'uncertain'}).eq('id',claimed);return fail(400,{message:claimed?'Historical request outcome needs verification. Do not resubmit the same request.':safeMessage(e)});}
+ },
+ requestChange:async(event:RequestEvent)=>{
+  const a=await identity(event);const f=await event.request.formData();
+  try{const m=await a.client.from('talazo_monitoring').select('id').eq('id',String(f.get('monitoring'))).eq('environment',provider().environment).single();if(!m.data)throw Error('Field access in the current environment required.');const crop=standardCrop(String(f.get('crop')||''));await rpc(a.client,'talazo_request_change',{p_monitoring:m.data.id,p_crop:crop.code,p_name:crop.entered,p_sowing:f.get('sowing')||null,p_boundary:f.get('boundary')?JSON.parse(String(f.get('boundary'))):null});return {message:'Field change submitted for Talazo review. Current monitoring remains unchanged until approval.'};}catch(e){return fail(400,{message:safeMessage(e)});}
+ },
+ cancelChange:async(event:RequestEvent)=>{
+  const a=await identity(event);const f=await event.request.formData();try{await rpc(a.client,'talazo_cancel_change',{p_id:f.get('change')});return {message:'Pending change cancelled.'};}catch(e){return fail(400,{message:safeMessage(e)});}
+ },
+ approveChange:async(event:RequestEvent)=>{
+  const a=await identity(event,true);const f=await event.request.formData();
+  try{const found=await a.client.from('talazo_field_changes').select('id,talazo_monitoring(environment)').eq('id',String(f.get('change'))).single();if((found.data?.talazo_monitoring as any)?.environment!==provider().environment)throw Error('Change belongs to another provider environment.');const change=await rpc(a.client,'talazo_claim_change',{p_id:f.get('change')});await applyFieldChange(change);return {message:'Provider field change verified and saved. Old season data is archived; fresh monitoring will load next.'};}catch(e){return fail(400,{message:safeMessage(e)});}
+ },
+ reconcileChange:async(event:RequestEvent)=>{
+  const a=await identity(event,true);const f=await event.request.formData();
+  try{const result=await a.client.from('talazo_field_changes').select('*,talazo_monitoring(provider_id,environment)').eq('id',String(f.get('change'))).single();const c=result.data;if(!c||!['applying','uncertain'].includes(c.state))throw Error('Only unresolved field changes can be verified.');await applyFieldChange({...c,lease:c.lease_id,...c.talazo_monitoring},true);return {message:'Provider read-back verified. The approved field change is complete.'};}catch(e){return fail(400,{message:safeMessage(e)});}
+ },
  importProvider:async(event:RequestEvent)=>{
   const a=await identity(event,true);const f=await event.request.formData();
   try{

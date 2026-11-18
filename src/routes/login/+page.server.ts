@@ -1,6 +1,6 @@
 import {fail,redirect} from '@sveltejs/kit';
-import {createSupabase} from '$lib/server/supabase';
-import {env} from '$env/dynamic/public';
+import {createSupabase} from '#lib/server/supabase.js';
+import * as env from '$app/env/public';
 export const load=()=>({configured:Boolean(env.PUBLIC_SUPABASE_URL&&(env.PUBLIC_SUPABASE_PUBLISHABLE_KEY||env.PUBLIC_SUPABASE_ANON_KEY))});
 export const actions={default:async({request,cookies}:import('@sveltejs/kit').RequestEvent)=>{
  const f=await request.formData();const client=createSupabase(cookies);

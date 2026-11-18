@@ -1,6 +1,6 @@
 import {writable} from 'svelte/store';
 import {goto} from '$app/navigation';
-import type {SubmitFunction} from '@sveltejs/kit';
+import type {SubmitFunction} from '$app/forms';
 export const processing=writable<{title:string;detail:string}|null>(null);
 export const notifications=writable<Array<{id:number;kind:'success'|'error';message:string}>>([]);
 let nextId=0;

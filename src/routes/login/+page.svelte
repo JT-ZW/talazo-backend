@@ -1,6 +1,6 @@
 <script lang="ts">
- import {enhance} from '$app/forms';import AuthShell from '$lib/AuthShell.svelte';
- import PasswordField from '$lib/PasswordField.svelte';import {feedbackForm} from '$lib/feedback';
+ import {enhance} from '$app/forms';import AuthShell from '#lib/AuthShell.svelte';
+ import PasswordField from '#lib/PasswordField.svelte';import {feedbackForm} from '#lib/feedback.ts';
  let {data,form}=$props();let busy=$state(false);
  const submit=feedbackForm({pending:'Signing you in',success:'You?re signed in. Welcome back.',onBusy:value=>busy=value});
 </script>

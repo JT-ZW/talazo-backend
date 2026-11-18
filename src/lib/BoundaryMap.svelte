@@ -1,6 +1,6 @@
 <script lang="ts">
  import {onMount} from 'svelte';
- import {env} from '$env/dynamic/public';
+ import * as env from '$app/env/public';
  import {previewArea} from './area.mjs';
  import {boundaryJSON,parseBoundary,parseCorners,validPoint} from './map-boundary.mjs';
  import {loadGoogleMaps} from './google-maps';

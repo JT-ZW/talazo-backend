@@ -1,6 +1,6 @@
 import { MongoClient } from 'mongodb';
-import { env } from '$env/dynamic/private';
-import { dev } from '$app/environment';
+import * as env from '$app/env/private';
+import { dev } from '$app/env';
 
 const mongoUri = env.MONGODB_URI || '';
 export const mongoEnabled = dev && Boolean(mongoUri);

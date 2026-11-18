@@ -1,5 +1,5 @@
 export const FARMONAUT_BASE = 'https://us-central1-farmbase-b2f7e.cloudfunctions.net';
-const endpoints = new Set(['getMyUsage','getAllFieldIDs','change_field_data','submitField','getSensedDays','getSARDays','getAllIndexValues','getFieldImage','getPresentWeather','getForecastWeather','getForecastWeatherFromLatLong','getFieldReport','generate_geotif_file','askJeevnAPI','getAdvisoryReport','getFieldIndexBreakdown','getFarmerData','pauseFieldMonitoring','resumeFieldMonitoring']);
+const endpoints = new Set(['getMyUsage','getAllFieldIDs','change_field_data','submitField','getSensedDays','getSARDays','getAllIndexValues','getFieldImage','getPresentWeather','getForecastWeather','getForecastWeatherFromLatLong','getFieldReport','generate_geotif_file','askJeevnAPI','getAdvisoryReport','getFieldIndexBreakdown','getFarmerData','pauseFieldMonitoring','resumeFieldMonitoring','updateCropCode','updateSowingDate','modifyFieldPoints','requestPreviousSatelliteData']);
 export class ProviderError extends Error {
  /** @param {string} code @param {boolean} [uncertain] */
  constructor(code, uncertain=false) { super(code); this.code=code; this.uncertain=uncertain; }

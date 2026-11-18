@@ -1,4 +1,4 @@
-import { deviceId, mongoEnabled, readings } from '$lib/server/mongo';
+import { deviceId, mongoEnabled, readings } from '#lib/server/mongo.js';
 
 /** @type {import('./$types').PageServerLoad} */
 export async function load({ params, getClientAddress }) {
