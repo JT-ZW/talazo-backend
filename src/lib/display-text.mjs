@@ -1,0 +1,2 @@
+﻿/** Presentation only. Raw provider data, URLs, identifiers and export provenance remain unchanged. @param {unknown} value */
+export function displayText(value){return String(value??'').replace(/Set FARMONAUT_TEST_MODE=false in the server configuration to use live monitoring\./g,'Enable live satellite monitoring in the server configuration.').replace(/FARMONAUT_API_KEY/g,'satellite API key').replace(/\b(?:Farmonaut|Farmanout)\b/g,'satellite monitoring').replace(/\bFARMONAUT\b/g,'SATELLITE SERVICE').replace(/\bJEEVN AI\b/g,'crop advisory');}

@@ -1,4 +1,7 @@
 ﻿<script lang="ts">
+ import {displayText} from './display-text.mjs';
+ import {onMount} from 'svelte';
+ let controlsReady=$state(false);onMount(()=>{controlsReady=true;});
  import {defaultLayer,imageLayers,imageDates,imageContext} from './imagery.mjs';
  import {normalizeIndex} from './satellite.mjs';
  import IndexAreaChart from './IndexAreaChart.svelte';
@@ -53,28 +56,28 @@
   return()=>{disposed=true;controller.abort();};
  });
 </script>
-<section bind:this={fullscreenElement} class="image-explorer" aria-label="Farmonaut dated field imagery">
- <header><div><p>FARMONAUT / FIELD IMAGERY</p><h2>{imageLayers.find(([id])=>id===layer)?.[1]}</h2></div><div class="header-actions"><button type="button" onclick={fullscreen}>Full screen</button><button type="button" onclick={()=>nonce++} disabled={loading} aria-label="Reload field view">↻ <span>Reload view</span></button></div></header>
+<section bind:this={fullscreenElement} class="image-explorer" aria-label="Talazo dated field imagery">
+ <header><div><p>TALAZO / FIELD IMAGERY</p><h2>{imageLayers.find(([id])=>id===layer)?.[1]}</h2></div><div class="header-actions"><button type="button" onclick={fullscreen}>Full screen</button><button type="button" onclick={()=>nonce++} disabled={loading} aria-label="Reload field view">↻ <span>Reload view</span></button></div></header>
  <div class="image-controls"><label>Image layer<select bind:value={chosenLayer} onchange={()=>chosenDate=''}><option value="">{imageLayers.find(([id])=>id===defaultLayer(section))?.[1]}</option>{#each imageLayers.filter(([id])=>id!==defaultLayer(section)) as [id,label]}<option value={id}>{label}</option>{/each}</select></label><label>{radar?'Radar pass':'Optical pass'}<select value={imageDate||''} onchange={e=>{chosenDate=e.currentTarget.value;if(!radar)onObservationChange?.(e.currentTarget.value);}} disabled={!dates.length}>{#if !dates.length}<option value="">No observations</option>{/if}{#each dates as d}<option value={d}>{dateText(d)}</option>{/each}</select></label></div>
  <!-- Interactive image viewport: keyboard pan/zoom and visible equivalent controls. -->
  <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
- <div class="viewer-tabs" role="group" aria-label="Imagery view"><button type="button" aria-pressed={view==='map'} onclick={()=>view='map'}>Google Maps</button><button type="button" aria-pressed={view==='image'} onclick={()=>view='image'}>Original satellite image</button></div>
+ <div class="viewer-tabs" role="group" aria-label="Imagery view"><button type="button" disabled={!controlsReady} aria-pressed={view==='map'} onclick={()=>view='map'}>Google Maps</button><button type="button" disabled={!controlsReady} aria-pressed={view==='image'} onclick={()=>view='image'}>Original satellite image</button></div>
  {#if view==='map'}<GeoreferencedMap {record} {boundary} date={imageDate} {layer}/>{:else}
  <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions (keyboard-operated pan and zoom canvas) -->
  <div class="image-stage" class:comparing={compare&&Boolean(otherDate)} class:dragging tabindex="0" role="application" aria-label="Field image viewer. Drag to pan; use plus and minus to zoom, arrow keys to pan and Home to reset." aria-busy={loading} onpointerdown={start} onpointermove={move} onpointerup={()=>dragging=false} onpointercancel={()=>dragging=false} onkeydown={key}>
-  {#if image&&!assetError}<div class="field-raster" class:half={compare&&Boolean(otherDate)} style:transform={`translate(${offsetX}px,${offsetY}px) scale(${zoom})`}><img class:pixelated={layer!=='tci'} src={image.url} alt={`${image.sample?'Provider sample':'Farmonaut field'} ${layer.toUpperCase()} image observed ${dateText(imageDate)}`} referrerpolicy="no-referrer" draggable="false" onerror={()=>assetError=true}/></div>
-  {:else}<div class="image-state">{#if loading}<span class="spinner" aria-hidden="true"></span><h3>Connecting to Farmonaut…</h3><p>Loading the dated field image and available advisory.</p>{:else}<h3>{!imageDate?'No image for this sensor yet.':'This image is not available yet.'}</h3><p>{assetError?'The provider’s image link could not be displayed.':message||result?.image?.error||'Farmonaut has not returned an image for the selected field, layer and date.'}</p>{#if result?.image?.retryAfter}<p>Retry after {new Date(result.image.retryAfter).toLocaleTimeString('en-GB',{timeZone:'Africa/Harare'})}.</p>{/if}{/if}</div>{/if}
+  {#if image&&!assetError}<div class="field-raster" class:half={compare&&Boolean(otherDate)} style:transform={`translate(${offsetX}px,${offsetY}px) scale(${zoom})`}><img class:pixelated={layer!=='tci'} src={image.url} alt={`${image.sample?'Provider sample':'Satellite field'} ${layer.toUpperCase()} image observed ${dateText(imageDate)}`} referrerpolicy="no-referrer" draggable="false" onerror={()=>assetError=true}/></div>
+  {:else}<div class="image-state">{#if loading}<span class="spinner" aria-hidden="true"></span><h3>Loading satellite imagery…</h3><p>Loading the dated field image and available advisory.</p>{:else}<h3>{!imageDate?'No image for this sensor yet.':'This image is not available yet.'}</h3><p>{assetError?'The provider’s image link could not be displayed.':message||result?.image?.error||'No satellite image is available for the selected field, layer and date.'}</p>{#if result?.image?.retryAfter}<p>Retry after {new Date(result.image.retryAfter).toLocaleTimeString('en-GB',{timeZone:'Africa/Harare'})}.</p>{/if}{/if}</div>{/if}
   {#if compare&&otherDate}<div class="comparison-panel"><span class="compare-label">COMPARE · {dateText(otherDate)}</span>{#if compareImage&&!comparisonError}<div class="comparison-raster" style:transform={`translate(${offsetX}px,${offsetY}px) scale(${zoom})`}><img class:pixelated={layer!=='tci'} src={compareImage.url} alt={`Comparison ${layer.toUpperCase()} observed ${dateText(otherDate)}`} referrerpolicy="no-referrer" draggable="false" onerror={()=>comparisonError=true}/></div>{:else}<p class="compare-state">{compareLoading?'Loading comparison…':comparisonError?'The comparison image could not be displayed.':comparison?.image?.error||'Comparison unavailable.'}</p>{/if}</div>{/if}
   <div class="image-badge">{result?.environment==='test'?'SAMPLE IMAGE · NOT YOUR FARM':'DATED FIELD IMAGE'}<small>{dateText(imageDate)} · {radar?'Radar':'Optical'} · {layer.toUpperCase()}</small></div>
  </div>
  <div class="compare-controls"><label><input type="checkbox" bind:checked={compare} disabled={dates.length<2}/> Compare observations</label>{#if compare&&otherDate}<label>Compare with<select value={otherDate} onchange={e=>compareDate=e.currentTarget.value}>{#each dates.filter(d=>d!==imageDate) as d}<option value={d}>{dateText(d)}</option>{/each}</select></label>{:else if dates.length<2}<span>A second observation enables comparison.</span>{/if}</div>
  <div class="image-bottom"><div class="zoom-tools" role="group" aria-label="Image controls"><button type="button" onclick={()=>zoom=Math.min(5,zoom+.25)} aria-label="Zoom in">+</button><button type="button" onclick={()=>zoom=Math.max(.5,zoom-.25)} aria-label="Zoom out">−</button><button type="button" onclick={reset}>Fit field</button></div>{#if image}<a href={image.url} target="_blank" rel="noopener noreferrer">Open full image ↗</a>{/if}<span>{index===null?'Index unavailable':`Field-average index ${index.toFixed(2)}`}</span></div>
  {#if layer!=='tci'}<div class="image-legend"><span>Lower index</span><div aria-label="Provider colour map 1: low values red through yellow to high values green"></div><span>Higher index</span></div>{/if}
- <p class="image-note">{imageContext(section)} Colours are supplied by Farmonaut. {result?.environment==='test'?'Sample imagery is displayed in image coordinates and is never placed over your actual farm boundary.':'The image uses provider image coordinates; no unverified geographic alignment is applied.'}</p>
+ <p class="image-note">{imageContext(section)} Colours represent the satellite analysis. {result?.environment==='test'?'Sample imagery is displayed in image coordinates and is never placed over your actual farm boundary.':'The image uses provider image coordinates; no unverified geographic alignment is applied.'}</p>
  {/if}
- {#if result?.advisory?.state==='error'}<p class="image-warning" role="status">Advisory: {result.advisory.error}</p>{/if}
+ {#if result?.advisory?.state==='error'}<p class="image-warning" role="status">Advisory: {displayText(result.advisory.error)}</p>{/if}
  {#if result?.advisory?.state==='pending'&&!loading}<p class="image-warning" role="status">An advisory request is still processing. Reload this view shortly.</p>{/if}
- {#if message}<p class="image-warning" role="status">{message}</p>{/if}
+ {#if message}<p class="image-warning" role="status">{displayText(message)}</p>{/if}
 </section>
 
 {#if layer!=='tci'}<IndexAreaChart product={result?.breakdown} {layer}/>{/if}

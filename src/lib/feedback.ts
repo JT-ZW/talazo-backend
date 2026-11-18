@@ -1,16 +1,18 @@
 import {writable} from 'svelte/store';
+import {displayText} from './display-text.mjs';
 import {goto} from '$app/navigation';
 import type {SubmitFunction} from '$app/forms';
 export const processing=writable<{title:string;detail:string}|null>(null);
 export const notifications=writable<Array<{id:number;kind:'success'|'error';message:string}>>([]);
 let nextId=0;
 export function notify(message:string,kind:'success'|'error'='success') {
+ message=displayText(message);
  const id=++nextId;
  notifications.update(items=>[...items.slice(-2),{id,kind,message}]);
  if(kind==='success')setTimeout(()=>dismiss(id),6500);
 }
 export const dismiss=(id:number)=>notifications.update(items=>items.filter(item=>item.id!==id));
-const progress:Record<string,string>={connection:'Checking production connection',discover:'Finding your existing Farmonaut field',reconcile:'Verifying the saved field boundary',details:'Updating field details in Farmonaut',weather:'Loading field forecast',activity:'Saving field activity',quota:'Saving monthly quota',allocation:'Saving farmer allocation',invite:'Preparing farmer access',status:'Updating account access',farm:'Saving your farm',zone:'Saving your growing area',request:'Submitting monitoring request',register:'Preparing satellite monitoring',sync:'Refreshing satellite observations',pause:'Pausing monitoring',report:'Preparing your report',signout:'Signing out'};
+const progress:Record<string,string>={connection:'Checking production connection',discover:'Finding your existing satellite field',reconcile:'Verifying the saved field boundary',details:'Updating satellite field details',weather:'Loading field forecast',activity:'Saving field activity',quota:'Saving monthly quota',allocation:'Saving farmer allocation',invite:'Preparing farmer access',status:'Updating account access',farm:'Saving your farm',zone:'Saving your growing area',request:'Submitting monitoring request',register:'Preparing satellite monitoring',sync:'Refreshing satellite observations',pause:'Pausing monitoring',report:'Preparing your report',signout:'Signing out'};
 export function feedbackForm(options:{pending?:string;success?:string;onBusy?:(busy:boolean)=>void;onSuccess?:(form:HTMLFormElement)=>void;resetOnSuccess?:boolean}={}):SubmitFunction {
  return ({action,formElement})=>{
   const operation=action.search.replace(/^\?\//,'');
