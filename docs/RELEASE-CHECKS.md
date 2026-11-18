@@ -44,3 +44,7 @@ SMS/email stress notifications, delivery retries/consent and the complete provid
 Local satellite development results and remaining limits are recorded in [local development delivery](LOCAL-DEVELOPMENT-DELIVERY.md). The final production bundle passed 48 unit tests, zero-error/zero-warning Svelte checks, a build, 18 browser pages with zero uncaught errors, disposable account isolation and the sample field-change approval/archive/alert/export flow. Migrations 012–016 are applied. Live worker field/inventory reads succeeded. Actual GeoTIFF retrieval timed out; live overlay alignment remains unverified. Paid field edits and historical requests were not exercised against active farms. External stress delivery remains off because no SMS provider or verified sender is configured.
 
 Production dependencies audit clean. Development-only transitive picomatch advisories remain without an upstream patch; see the linked delivery note. Vercel deployment is deferred.
+
+## Final pre-deployment review
+
+The current decision and evidence are in [the 18 November pre-deployment review](PREDEPLOYMENT-REVIEW.md). It supersedes earlier test counts and dependency-audit results: 49 unit tests and the complete dependency audit now pass; Linux CI verifies the official Vercel build. The report distinguishes protected-pilot readiness from the outstanding provider, MFA and hosting gates.

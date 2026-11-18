@@ -27,7 +27,8 @@ try{
  const reports=[];
  for(const kind of ['pdf','advisory']){const form=new FormData();for(const [key,value] of Object.entries({monitoring:mapping.id,date,kind}))form.set(key,value);const r=await fetch(origin+'/portal/analysis?/report',{method:'POST',body:form,headers:{Origin:origin,Cookie:cookies(),Accept:'application/json'},signal:AbortSignal.timeout(120000)});const action=await r.json();const payload=action.data?parse(action.data):{};reports.push({kind,ready:action.type==='success'&&Boolean(payload.asset),message:payload.message});}
  console.log(JSON.stringify({liveField:true,observation:date,ndviImage:ndvi.data.image.state,areaBreakdown:ndvi.data.breakdown.state,advisoryTopics:Object.keys(ndvi.data.advisory.value.value.advisory),layers,reports,pages:8,cachedRead:true,unrelatedFarmerDenied:true,invalidDateDenied:true}));
- if(layers.some(v=>v.image!=='ready'))process.exitCode=1;
+ // A report failure must fail the release check, even when imagery succeeds.
+ if(layers.some(v=>v.image!=='ready'||v.breakdown!=='ready')||reports.some(v=>!v.ready))process.exitCode=1;
 }finally{
  if(identity){await db.query('delete from platform_admins where user_id=$1',[identity]);await db.query('delete from talazo_accounts where user_id=$1',[identity]);const removed=await auth.auth.admin.deleteUser(identity);if(removed.error)throw Error('Disposable identity cleanup failed');}
  await db.end();
