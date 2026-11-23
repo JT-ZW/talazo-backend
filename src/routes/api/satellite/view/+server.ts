@@ -15,7 +15,7 @@ export async function POST(event:import('@sveltejs/kit').RequestEvent){
  if(!imageDates(products[radar?'getSARDays':'getSensedDays']?.value,radar).includes(body.date))return json({message:'Image date is not available for this field and sensor.'},{status:400});
  const advisoryDate=String(body.advisoryDate||body.date);
  const wantsAdvisory=Boolean(body.advisory)&&imageDates(products.getSensedDays?.value).includes(advisoryDate);
- const results=await Promise.allSettled([providerProduct(a.client,m.data,body.date,'image:'+body.layer),wantsAdvisory?providerProduct(a.client,m.data,advisoryDate,'advisory'):Promise.resolve(null),body.breakdown&&body.layer!=='tci'?providerProduct(a.client,m.data,body.date,'breakdown:'+body.layer):Promise.resolve(null)]);
+ const results=await Promise.allSettled([body.image===false?Promise.resolve(null):providerProduct(a.client,m.data,body.date,'image:'+body.layer),wantsAdvisory?providerProduct(a.client,m.data,advisoryDate,'advisory'):Promise.resolve(null),body.breakdown&&body.layer!=='tci'?providerProduct(a.client,m.data,body.date,'breakdown:'+body.layer):Promise.resolve(null)]);
  const result=(i:number)=>results[i].status==='fulfilled'?(results[i] as PromiseFulfilledResult<any>).value:{state:'error',error:'The provider product could not be loaded.'};
  return json({image:result(0),advisory:result(1),breakdown:result(2),environment:provider().environment,monitoring:m.data.id,date:body.date,layer:body.layer},{headers:{'Cache-Control':'private, no-store'}});
 }

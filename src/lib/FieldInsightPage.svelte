@@ -1,25 +1,111 @@
-﻿<script lang="ts">
+<script lang="ts">
  import CropInsights from './CropInsights.svelte';
  import ImageExplorer from './ImageExplorer.svelte';
- import ObservationTrend from './ObservationTrend.svelte';
- import {normalizeIndex} from './satellite.mjs';
- import {insightPages} from './insight-pages.mjs';
- import {imageDates} from './imagery.mjs';
- import BoundaryMap from './BoundaryMap.svelte';
- let {section,zone,farm,record,products,date,enhanced,busy,onObservationChange}:{section:string,zone:any,farm:any,record:any,products:any,date:string,enhanced:any,busy:boolean,onObservationChange?:(date:string)=>void}=$props();
- let advisoryProduct=$state<any>(null);
- let showLocation=$state(false);
- let advice=$derived(products.askJeevnAPI?.requestedDate===date&&Date.parse(products.askJeevnAPI.fetchedAt)>Date.parse(advisoryProduct?.fetchedAt||'1970-01-01')?products.askJeevnAPI:advisoryProduct||products.askJeevnAPI);
- const dateText=(v:string)=>v&&/^\d{8}$/.test(v)?`${v.slice(6)}/${v.slice(4,6)}/${v.slice(0,4)}`:'Awaiting an observation';
- let ndvi=$derived(normalizeIndex(products.getAllIndexValues?.value?.ndvi?.[date]));
+ import ProviderConnection from './ProviderConnection.svelte';
+ import {datedAdvisory} from './advisory-model.mjs';
+ import {defaultLayer} from './imagery.mjs';
+ import {normalizeIndex,sensedMap} from './satellite.mjs';
+
+ let {section,zone,farm,record,products,date,form,enhanced,busy}:{section:string;zone:any;farm:any;record:any;products:any;date:string;form?:any;enhanced:any;busy:boolean}=$props();
+ const topics:Record<string,{lead:string;check:string;map:string}> = {
+  pests:{lead:'Potential pests and diseases',check:'Scout the crop for visible symptoms and check which plants are affected. Use the advisory to guide inspection.',map:'Vegetation context'},
+  weeds:{lead:'Potential weed pressure',check:'Walk the field edges and affected patches. Identify the plants and record the extent before deciding how to manage them.',map:'Vegetation context'},
+  nutrients:{lead:'Nutrient guidance',check:'Review the suggested nutrients against crop stage, recent applications and soil or tissue tests.',map:'Red-edge vegetation context'},
+  irrigation:{lead:'Irrigation outlook',check:'Check recent rain, the field forecast and soil moisture before using the suggested schedule.',map:'Canopy moisture context'},
+  yield:{lead:'Yield and harvest outlook',check:'Review the estimate against crop stage, field observations and harvest records as the season progresses.',map:'Vegetation context'},
+  soil:{lead:'Soil indicators',check:'Use these estimates to guide where you sample. Confirm soil properties with a field sample and laboratory results.',map:'Organic carbon context'}
+ };
+ let topic=$derived(topics[section]);
+ let observations=$derived(sensedMap(products.getSensedDays?.value));
+ let cloudy=$derived(observations[date]?.isCloudy===true);
+ let recent=$state<any>(null);
+ let advisoryState=$state<'loading'|'ready'|'unavailable'>('loading');
+ let advisoryError=$state('');
+ let showImagery=$state(false);
+ let saved=$derived(form?.assetMonitoring===record.id&&form?.assetDate===date?form.advisoryProduct:null);
+ let product=$derived(datedAdvisory(saved,date)?saved:datedAdvisory(recent,date)?recent:products.askJeevnAPI);
+ let dateLabel=$derived(date?date.slice(6)+'/'+date.slice(4,6)+'/'+date.slice(0,4):'Awaiting observation');
+ let ndmi=$derived(cloudy?null:normalizeIndex(products.getAllIndexValues?.value?.ndmi?.[date]));
+ const link=(path:string)=>'/portal/'+path+'?'+new URLSearchParams({field:zone.id,...(date&&path!=='weather'?{date}:{})});
+
+ $effect(()=>{
+  const id=record.id,selected=date,layer=defaultLayer(section);
+  recent=null;
+  advisoryError='';
+  if(!selected||cloudy||record.status!=='active'){
+   advisoryState='unavailable';
+   return;
+  }
+  const controller=new AbortController();
+  const signal=controller.signal;
+  advisoryState='loading';
+  void (async()=>{
+   try{
+    for(let attempt=0;attempt<5;attempt++){
+     const response=await fetch('/api/satellite/view',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({monitoring:id,date:selected,layer,image:false,advisory:true}),signal
+     });
+     if(!response.ok)throw Error('The dated advisory could not be loaded.');
+     const result=(await response.json()).advisory;
+     if(signal.aborted)return;
+     if(result?.state==='pending'){
+      await new Promise(resolve=>setTimeout(resolve,2000));
+      if(signal.aborted)return;
+      continue;
+     }
+     if(result?.state!=='ready'||!datedAdvisory(result.value,selected))throw Error(result?.error||'An advisory is unavailable for this observation.');
+     recent=result.value;
+     advisoryState='ready';
+     return;
+    }
+    throw Error('The advisory is still processing. Try again shortly.');
+   }catch(error){
+    if(signal.aborted)return;
+    advisoryState='unavailable';
+    advisoryError=error instanceof Error?error.message:'The advisory could not be loaded.';
+   }
+  })();
+  return()=>controller.abort();
+ });
 </script>
-<nav class="topic-rail" aria-label="Field monitoring views"><a href={'/portal/satellite?field='+zone.id} aria-current={section==='satellite'?'page':undefined}>Field overview</a>{#each insightPages as [id,label]}<a href={'/portal/'+id+'?field='+zone.id} aria-current={section===id?'page':undefined}>{label}</a>{/each}</nav>
-<div class="insight-layout">
- <aside class="insight-sidebar" aria-label="Selected field advisory"><div class="field-summary"><p>YOUR FIELD / {farm?.name}</p><h2>{zone.name}</h2><div><span>{zone.crop_entered_name||zone.crop_name}</span><span>{(Number(zone.area_sqm)/10000).toLocaleString('en',{maximumFractionDigits:4})} ha</span></div><small>Advisory observation · {dateText(date)}</small></div><div class="pass-dates"><div><span>Optical pass</span><strong>{dateText(date)}</strong></div><div><span>Latest radar pass</span><strong>{dateText(imageDates(products.getSARDays?.value,true)[0])}</strong></div></div><CropInsights {record} {date} product={advice} {enhanced} {busy} topicId={section==='satellite'?'health':section} standalone/></aside>
- <div class="insight-visual"><ImageExplorer boundary={zone.boundary} {section} {record} {products} {date} {onObservationChange} bind:advisoryProduct/>
- {#if section==='health'}<section class="p-card"><p class="p-kicker">CROP HEALTH / VEGETATION HISTORY</p><h2>Follow change through your season.</h2><p>NDVI for the selected observation: <strong>{ndvi===null?'Unavailable':ndvi.toFixed(2)}</strong>. This vegetation index does not identify the cause of crop stress.</p><ObservationTrend series={products.getAllIndexValues?.value?.ndvi||{}}/></section>{/if}
- <details class="field-location" bind:open={showLocation}><summary>Field boundary & location</summary><p>This reference map shows your saved boundary. Dated crop imagery is displayed above.</p>{#if showLocation}<BoundaryMap value={JSON.stringify(zone.boundary)} editable={false}/>{/if}</details>
- <div class="next-views"><a class="p-button subtle" href={'/portal/analysis?field='+zone.id}>Analysis, reports & field records ↗</a><a class="p-button subtle" href={'/portal/weather?field='+zone.id}>Field weather ↗</a></div></div>
+
+<section class="p-card topic-summary" aria-labelledby="topic-selected-field">
+ <div><p class="p-kicker">{farm?.name}</p><h2 id="topic-selected-field">{zone.name}</h2><p>{zone.crop_entered_name||zone.crop_name} &middot; {dateLabel}</p></div>
+ <span class="p-pill">{!date?'Awaiting observation':cloudy?'Cloud-affected':observations[date]?.isCloudy===false?'Clear optical observation':'Cloud quality unreported'}</span>
+</section>
+
+{#if cloudy}
+ <section class="p-card"><h2>{topic.lead}</h2><p>Clouds affected this observation. Choose a clearer date to review satellite-based guidance.</p><a class="p-button subtle" href={link('satellite')}>Open satellite monitoring &nearr;</a></section>
+{:else}
+ <CropInsights {record} {date} {product} {enhanced} {busy} topicId={section} standalone
+  heading={topic.lead} nextCheck={topic.check} loading={advisoryState==='loading'} loadError={advisoryError}/>
+{/if}
+
+{#if section==='irrigation'}
+ <section class="p-card topic-support">
+  <div><h2>Vegetation moisture</h2><p>NDMI for {dateLabel}: <strong>{ndmi?.toFixed(2)??'Unavailable'}</strong>. This index describes vegetation moisture from satellite imagery.</p></div>
+  <a class="p-button subtle" href={link('weather')}>Check this field's forecast &nearr;</a>
+ </section>
+{/if}
+
+<section class="p-card topic-support">
+ <div><h2>{topic.map}</h2><p>View the dated layer alongside the saved field boundary.</p></div>
+ <button type="button" class="p-button subtle" aria-expanded={showImagery} aria-controls="topic-imagery" onclick={()=>showImagery=!showImagery}>{showImagery?'Hide satellite imagery':'View satellite imagery'}</button>
+</section>
+<div id="topic-imagery">
+ {#if showImagery}<ImageExplorer boundary={zone.boundary} {section} {record} {products} {date} contextOnly/>{/if}
 </div>
-<style>.topic-rail{display:flex;flex-direction:row;gap:6px;overflow-x:auto;margin:0 0 18px;padding-bottom:6px}.topic-rail a{white-space:nowrap;padding:10px 14px;border:1px solid #d4dec9;border-radius:7px;font-size:11px;background:#fffef7}.topic-rail a[aria-current="page"]{background:#163f32;color:#fffef5;border-color:#163f32}.topic-rail a:focus-visible{outline:2px solid #b27d28;outline-offset:2px}.pass-dates{display:grid;grid-template-columns:1fr 1fr;padding:18px 22px;gap:10px;border-bottom:1px solid #e1e6d7;background:#f7f8ef}.pass-dates span{display:block;font-size:9px;color:#74816c}.pass-dates strong{display:block;font-size:12px;margin-top:8px}.field-location{border:1px solid #dce3d1;border-radius:12px;background:#fffef7;padding:20px;margin-bottom:20px}.field-location summary{font-size:12px;font-weight:600;cursor:pointer}.field-location p{font-size:11px;color:#6e7d66}.insight-layout{display:grid;grid-template-columns:minmax(270px,.85fr) minmax(0,2fr);gap:20px;align-items:start}.insight-sidebar{height:auto;position:static;padding:0;display:block;min-width:0;max-height:980px;overflow-y:auto;overscroll-behavior:contain;border-radius:14px;background:#fffef9;border:1px solid #dce2d4}.insight-sidebar :global(.p-card){border:0;margin:0;padding:22px;border-radius:0}.insight-sidebar :global(.p-section-heading){display:block}.insight-sidebar :global(.p-section-heading h2){font-size:22px}.insight-sidebar :global(.p-section-heading form){margin:16px 0}.insight-sidebar :global(.p-button){width:100%}.field-summary{padding:24px;background:#e7edda;color:#123f32}.field-summary>p{font-size:9px;letter-spacing:.13em;text-transform:uppercase;margin:0 0 12px}.field-summary h2{font-size:25px;margin:0 0 16px}.field-summary>div{display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between;font-size:12px}.field-summary small{display:block;font-size:10px;color:#68795f;margin-top:14px}.insight-visual{min-width:0}.next-views{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px}@media(max-width:1100px){.insight-layout{grid-template-columns:1fr}.insight-visual{grid-row:1}.insight-sidebar{max-height:none}}
+<div class="topic-footer">
+ <div><a class="p-button subtle" href={link('health')}>Crop health &nearr;</a><a class="p-button subtle" href={link('analysis')}>Analysis &amp; reports &nearr;</a></div>
+ <ProviderConnection {record}/>
+</div>
+
+<style>
+ .topic-summary,.topic-support{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px 20px}
+ .p-card.topic-summary,.p-card.topic-support{padding-block:16px;margin-bottom:16px}
+ .topic-summary h2,.topic-support h2{margin:0 0 5px}
+ .topic-summary p,.topic-support p{margin:0}
+ .topic-summary h2{overflow-wrap:anywhere}
+ .topic-footer>div{display:flex;gap:10px;flex-wrap:wrap}
 </style>

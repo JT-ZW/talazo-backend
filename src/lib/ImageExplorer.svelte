@@ -1,22 +1,25 @@
-﻿<script lang="ts">
+<script lang="ts">
  import {displayText} from './display-text.mjs';
  import {onMount} from 'svelte';
  let controlsReady=$state(false);onMount(()=>{controlsReady=true;});
  import {defaultLayer,imageLayers,imageDates,imageContext} from './imagery.mjs';
- import {normalizeIndex} from './satellite.mjs';
+ import {sensedMap,normalizeIndex} from './satellite.mjs';
  import IndexAreaChart from './IndexAreaChart.svelte';
  import GeoreferencedMap from './GeoreferencedMap.svelte';
  let view=$state('map');
- let {record,products,date,boundary,section='satellite',advisoryProduct=$bindable(null),onObservationChange}:{record:any,products:any,date:string,boundary?:any,section?:string,advisoryProduct?:any,onObservationChange?:(date:string)=>void}=$props();
+ let {record,products,date,boundary,section='satellite',streamlined=false,healthMode=false,contextOnly=false,areaBreakdown=$bindable(null),advisoryProduct=$bindable(null),onObservationChange}:{record:any,products:any,date:string,boundary?:any,section?:string,streamlined?:boolean,healthMode?:boolean,contextOnly?:boolean,areaBreakdown?:any,advisoryProduct?:any,onObservationChange?:(date:string)=>void}=$props();
  let chosenLayer=$state(''),chosenDate=$state(''),nonce=$state(0),result=$state<any>(null),loading=$state(false),message=$state(''),assetError=$state(false);
  let layer=$derived(chosenLayer||defaultLayer(section)),radar=$derived(['rvi','rsm'].includes(layer));
  let dates=$derived(imageDates(products[radar?'getSARDays':'getSensedDays']?.value,radar));
- let imageDate=$derived(dates.includes(chosenDate)?chosenDate:dates.includes(date)?date:dates[0]);
+ let imageDate=$derived(!streamlined&&!healthMode&&!contextOnly&&dates.includes(chosenDate)?chosenDate:dates.includes(date)?date:dates[0]);
  let image=$derived(result?.image?.state==='ready'?result.image.value:null);
  let index=$derived(normalizeIndex(products.getAllIndexValues?.value?.[layer]?.[imageDate]));
  let compare=$state(false),compareDate=$state(''),comparison=$state<any>(null),compareLoading=$state(false),comparisonError=$state(false);
  let fullscreenElement:HTMLElement;
- let otherDate=$derived(dates.includes(compareDate)&&compareDate!==imageDate?compareDate:dates.find(d=>d!==imageDate));
+ let sensed=$derived(sensedMap(products.getSensedDays?.value));
+ let previousUsable=$derived(dates.find(d=>d<imageDate&&!sensed[d]?.isCloudy));
+ let otherDate=$derived(streamlined?previousUsable:dates.includes(compareDate)&&compareDate!==imageDate?compareDate:dates.find(d=>d!==imageDate));
+ let comparing=$derived(compare&&(!streamlined||view==='image'&&!sensed[imageDate]?.isCloudy));
  let compareImage=$derived(comparison?.image?.state==='ready'?comparison.image.value:null);
  async function fullscreen(){try{if(document.fullscreenElement)await document.exitFullscreen();else await fullscreenElement.requestFullscreen();}catch{message='Full-screen mode is not available in this browser.';}}
  let zoom=$state(1),offsetX=$state(0),offsetY=$state(0),dragging=$state(false),originX=0,originY=0;
@@ -26,19 +29,19 @@
  function move(e:PointerEvent){if(dragging){offsetX=e.clientX-originX;offsetY=e.clientY-originY;}}
  function key(e:KeyboardEvent){if(e.key==='+'||e.key==='=')zoom=Math.min(5,zoom+.25);else if(e.key==='-')zoom=Math.max(.5,zoom-.25);else if(e.key==='Home')reset();else if(e.key==='ArrowLeft')offsetX-=25;else if(e.key==='ArrowRight')offsetX+=25;else if(e.key==='ArrowUp')offsetY-=25;else if(e.key==='ArrowDown')offsetY+=25;else return;e.preventDefault();}
  $effect(()=>{
-  const id=record.id,d=imageDate,l=layer,ad=date,requestVersion=nonce,wantAdvice=true;
+  const id=record.id,d=imageDate,l=layer,ad=date,requestVersion=nonce,wantImage=!(healthMode||contextOnly)||view==='image',wantAdvice=!streamlined&&!contextOnly&&(!healthMode||sensed[d]?.isCloudy!==true);
   void requestVersion;
-  result=null;advisoryProduct=null;message='';assetError=false;reset();
-  if(!d){loading=false;return;}
+  result=null;advisoryProduct=null;areaBreakdown=null;message='';assetError=false;reset();
+  if(!d||(streamlined||contextOnly)&&view==='map'){loading=false;return;}
   const controller=new AbortController();let disposed=false;
   loading=true;
   (async()=>{
    try{
     for(let attempt=0;attempt<5;attempt++){
-     const response=await fetch('/api/satellite/view',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({monitoring:id,date:d,layer:l,advisoryDate:ad,advisory:wantAdvice,breakdown:true}),signal:controller.signal});
+     const response=await fetch('/api/satellite/view',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({monitoring:id,date:d,layer:l,advisoryDate:ad,advisory:wantAdvice,breakdown:!streamlined&&!contextOnly,image:wantImage}),signal:controller.signal});
      if(!response.ok)throw new Error(response.status===403?'Your field is not active or your session has ended.':'The provider view could not be loaded.');
      const data=await response.json();if(disposed)return;
-     result=data;
+     result=data;areaBreakdown=data.breakdown;
      if(data.advisory?.state==='ready')advisoryProduct=data.advisory.value;
      if(data.image?.state==='pending'||data.advisory?.state==='pending'||data.breakdown?.state==='pending'){await new Promise(resolve=>setTimeout(resolve,1500));continue;}
      break;
@@ -49,29 +52,56 @@
   return()=>{disposed=true;controller.abort();};
  });
  $effect(()=>{
-  const id=record.id,d=otherDate,l=layer,enabled=compare,version=nonce;void version;
+  const id=record.id,d=otherDate,l=layer,enabled=comparing,version=nonce;void version;
   comparison=null;comparisonError=false;if(!enabled||!d){compareLoading=false;return;}
   const controller=new AbortController();let disposed=false;compareLoading=true;
   (async()=>{try{for(let attempt=0;attempt<5;attempt++){const response=await fetch('/api/satellite/view',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({monitoring:id,date:d,layer:l,advisory:false}),signal:controller.signal});if(!response.ok)throw Error('Comparison image could not be loaded.');const data=await response.json();if(disposed)return;comparison=data;if(data.image?.state==='pending'){await new Promise(resolve=>setTimeout(resolve,1500));continue;}break;}}catch(e){if(!disposed)comparison={image:{state:'error',error:e instanceof Error?e.message:'Comparison unavailable.'}};}finally{if(!disposed)compareLoading=false;}})();
   return()=>{disposed=true;controller.abort();};
  });
 </script>
-<section bind:this={fullscreenElement} class="image-explorer" aria-label="Talazo dated field imagery">
+<section bind:this={fullscreenElement} class="image-explorer" class:health-view={healthMode||contextOnly} aria-label="Talazo dated field imagery">
  <header><div><p>TALAZO / FIELD IMAGERY</p><h2>{imageLayers.find(([id])=>id===layer)?.[1]}</h2></div><div class="header-actions"><button type="button" onclick={fullscreen}>Full screen</button><button type="button" onclick={()=>nonce++} disabled={loading} aria-label="Reload field view">↻ <span>Reload view</span></button></div></header>
- <div class="image-controls"><label>Image layer<select bind:value={chosenLayer} onchange={()=>chosenDate=''}><option value="">{imageLayers.find(([id])=>id===defaultLayer(section))?.[1]}</option>{#each imageLayers.filter(([id])=>id!==defaultLayer(section)) as [id,label]}<option value={id}>{label}</option>{/each}</select></label><label>{radar?'Radar pass':'Optical pass'}<select value={imageDate||''} onchange={e=>{chosenDate=e.currentTarget.value;if(!radar)onObservationChange?.(e.currentTarget.value);}} disabled={!dates.length}>{#if !dates.length}<option value="">No observations</option>{/if}{#each dates as d}<option value={d}>{dateText(d)}</option>{/each}</select></label></div>
+ {#if streamlined}
+  <div class="image-controls quick-controls">
+   <div class="quick-layers" role="group" aria-label="Map layer">
+    {#each [['ndvi','Vegetation'],['ndmi','Moisture'],['tci','True colour']] as [id,label]}
+     <button type="button" aria-pressed={layer===id} onclick={()=>chosenLayer=id}>{label}</button>
+    {/each}
+   </div>
+   <label>Observation date<select value={imageDate||''} onchange={e=>onObservationChange?.(e.currentTarget.value)} disabled={!dates.length}>
+    {#if !dates.length}<option value="">No observations</option>{/if}
+    {#each dates as d}<option value={d}>{dateText(d)}{sensed[d]?.isCloudy?' (cloud-affected)':''}</option>{/each}
+   </select></label>
+  </div>
+  <div class="quick-comparison">
+   <span class="quality">{!imageDate?'Awaiting first image':sensed[imageDate]?.isCloudy?'Cloud-affected':sensed[imageDate]?.isCloudy===false?'Usable optical observation':'Cloud quality unreported'}</span>
+   <button type="button" aria-pressed={compare&&view==='image'} disabled={!previousUsable||Boolean(sensed[imageDate]?.isCloudy)} onclick={()=>{compare=!(compare&&view==='image');view=compare?'image':'map';}}>{compare&&view==='image'?'End comparison':'Compare with previous usable observation'}</button>
+  </div>
+ {:else if contextOnly}<p class="context-observation">Observation {dateText(imageDate)}</p>
+ {:else if healthMode}
+  <div class="image-controls quick-controls">
+   <div class="quick-layers" role="group" aria-label="Crop health layer">
+    {#each [['ndvi','NDVI'],['evi','EVI'],['savi','SAVI'],['tci','True colour']] as [id,label]}
+     <button type="button" aria-pressed={layer===id} onclick={()=>chosenLayer=id}>{label}</button>
+    {/each}
+   </div>
+   <span aria-label="Image observation date">{dateText(imageDate)}</span>
+  </div>
+ {:else}<div class="image-controls"><label>Image layer<select bind:value={chosenLayer} onchange={()=>chosenDate=''}><option value="">{imageLayers.find(([id])=>id===defaultLayer(section))?.[1]}</option>{#each imageLayers.filter(([id])=>id!==defaultLayer(section)) as [id,label]}<option value={id}>{label}</option>{/each}</select></label><label>{radar?'Radar pass':'Optical pass'}<select value={imageDate||''} onchange={e=>{chosenDate=e.currentTarget.value;if(!radar)onObservationChange?.(e.currentTarget.value);}} disabled={!dates.length}>{#if !dates.length}<option value="">No observations</option>{/if}{#each dates as d}<option value={d}>{dateText(d)}</option>{/each}</select></label></div>
+ {/if}
  <!-- Interactive image viewport: keyboard pan/zoom and visible equivalent controls. -->
  <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
  <div class="viewer-tabs" role="group" aria-label="Imagery view"><button type="button" disabled={!controlsReady} aria-pressed={view==='map'} onclick={()=>view='map'}>Google Maps</button><button type="button" disabled={!controlsReady} aria-pressed={view==='image'} onclick={()=>view='image'}>Original satellite image</button></div>
- {#if view==='map'}<GeoreferencedMap {record} {boundary} date={imageDate} {layer}/>{:else}
+ {#if view==='map'}{#key nonce}<GeoreferencedMap {record} {boundary} date={imageDate} {layer} compact={healthMode||contextOnly} onOpenImage={()=>view='image'}/>{/key}{:else}
  <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions (keyboard-operated pan and zoom canvas) -->
- <div class="image-stage" class:comparing={compare&&Boolean(otherDate)} class:dragging tabindex="0" role="application" aria-label="Field image viewer. Drag to pan; use plus and minus to zoom, arrow keys to pan and Home to reset." aria-busy={loading} onpointerdown={start} onpointermove={move} onpointerup={()=>dragging=false} onpointercancel={()=>dragging=false} onkeydown={key}>
-  {#if image&&!assetError}<div class="field-raster" class:half={compare&&Boolean(otherDate)} style:transform={`translate(${offsetX}px,${offsetY}px) scale(${zoom})`}><img class:pixelated={layer!=='tci'} src={image.url} alt={`${image.sample?'Provider sample':'Satellite field'} ${layer.toUpperCase()} image observed ${dateText(imageDate)}`} referrerpolicy="no-referrer" draggable="false" onerror={()=>assetError=true}/></div>
-  {:else}<div class="image-state">{#if loading}<span class="spinner" aria-hidden="true"></span><h3>Loading satellite imagery…</h3><p>Loading the dated field image and available advisory.</p>{:else}<h3>{!imageDate?'No image for this sensor yet.':'This image is not available yet.'}</h3><p>{assetError?'The provider’s image link could not be displayed.':message||result?.image?.error||'No satellite image is available for the selected field, layer and date.'}</p>{#if result?.image?.retryAfter}<p>Retry after {new Date(result.image.retryAfter).toLocaleTimeString('en-GB',{timeZone:'Africa/Harare'})}.</p>{/if}{/if}</div>{/if}
-  {#if compare&&otherDate}<div class="comparison-panel"><span class="compare-label">COMPARE · {dateText(otherDate)}</span>{#if compareImage&&!comparisonError}<div class="comparison-raster" style:transform={`translate(${offsetX}px,${offsetY}px) scale(${zoom})`}><img class:pixelated={layer!=='tci'} src={compareImage.url} alt={`Comparison ${layer.toUpperCase()} observed ${dateText(otherDate)}`} referrerpolicy="no-referrer" draggable="false" onerror={()=>comparisonError=true}/></div>{:else}<p class="compare-state">{compareLoading?'Loading comparison…':comparisonError?'The comparison image could not be displayed.':comparison?.image?.error||'Comparison unavailable.'}</p>{/if}</div>{/if}
+ <div class="image-stage" class:comparing={comparing&&Boolean(otherDate)} class:dragging tabindex="0" role="application" aria-label="Field image viewer. Drag to pan; use plus and minus to zoom, arrow keys to pan and Home to reset." aria-busy={loading} onpointerdown={start} onpointermove={move} onpointerup={()=>dragging=false} onpointercancel={()=>dragging=false} onkeydown={key}>
+  {#if image&&!assetError}<div class="field-raster" class:half={comparing&&Boolean(otherDate)} style:transform={`translate(${offsetX}px,${offsetY}px) scale(${zoom})`}><img class:pixelated={layer!=='tci'} src={image.url} alt={`${image.sample?'Provider sample':'Satellite field'} ${layer.toUpperCase()} image observed ${dateText(imageDate)}`} referrerpolicy="no-referrer" draggable="false" onerror={()=>assetError=true}/></div>
+  {:else}<div class="image-state">{#if loading}<span class="spinner" aria-hidden="true"></span><h3>Loading satellite imagery…</h3><p>Loading the dated field image.</p>{:else}<h3>{!imageDate?'No image for this sensor yet.':'This image is not available yet.'}</h3><p>{assetError?'The provider’s image link could not be displayed.':message||result?.image?.error||'No satellite image is available for the selected field, layer and date.'}</p>{#if result?.image?.retryAfter}<p>Retry after {new Date(result.image.retryAfter).toLocaleTimeString('en-GB',{timeZone:'Africa/Harare'})}.</p>{/if}{/if}</div>{/if}
+  {#if comparing&&otherDate}<div class="comparison-panel"><span class="compare-label">COMPARE · {dateText(otherDate)}</span>{#if compareImage&&!comparisonError}<div class="comparison-raster" style:transform={`translate(${offsetX}px,${offsetY}px) scale(${zoom})`}><img class:pixelated={layer!=='tci'} src={compareImage.url} alt={`Comparison ${layer.toUpperCase()} observed ${dateText(otherDate)}`} referrerpolicy="no-referrer" draggable="false" onerror={()=>comparisonError=true}/></div>{:else}<p class="compare-state">{compareLoading?'Loading comparison…':comparisonError?'The comparison image could not be displayed.':comparison?.image?.error||'Comparison unavailable.'}</p>{/if}</div>{/if}
   <div class="image-badge">{result?.environment==='test'?'SAMPLE IMAGE · NOT YOUR FARM':'DATED FIELD IMAGE'}<small>{dateText(imageDate)} · {radar?'Radar':'Optical'} · {layer.toUpperCase()}</small></div>
  </div>
- <div class="compare-controls"><label><input type="checkbox" bind:checked={compare} disabled={dates.length<2}/> Compare observations</label>{#if compare&&otherDate}<label>Compare with<select value={otherDate} onchange={e=>compareDate=e.currentTarget.value}>{#each dates.filter(d=>d!==imageDate) as d}<option value={d}>{dateText(d)}</option>{/each}</select></label>{:else if dates.length<2}<span>A second observation enables comparison.</span>{/if}</div>
- <div class="image-bottom"><div class="zoom-tools" role="group" aria-label="Image controls"><button type="button" onclick={()=>zoom=Math.min(5,zoom+.25)} aria-label="Zoom in">+</button><button type="button" onclick={()=>zoom=Math.max(.5,zoom-.25)} aria-label="Zoom out">−</button><button type="button" onclick={reset}>Fit field</button></div>{#if image}<a href={image.url} target="_blank" rel="noopener noreferrer">Open full image ↗</a>{/if}<span>{index===null?'Index unavailable':`Field-average index ${index.toFixed(2)}`}</span></div>
+ {#if !streamlined&&!healthMode&&!contextOnly}<div class="compare-controls"><label><input type="checkbox" bind:checked={compare} disabled={dates.length<2}/> Compare observations</label>{#if compare&&otherDate}<label>Compare with<select value={otherDate} onchange={e=>compareDate=e.currentTarget.value}>{#each dates.filter(d=>d!==imageDate) as d}<option value={d}>{dateText(d)}</option>{/each}</select></label>{:else if dates.length<2}<span>A second observation enables comparison.</span>{/if}</div>{/if}
+ <div class="image-bottom"><div class="zoom-tools" role="group" aria-label="Image controls"><button type="button" onclick={()=>zoom=Math.min(5,zoom+.25)} aria-label="Zoom in">+</button><button type="button" onclick={()=>zoom=Math.max(.5,zoom-.25)} aria-label="Zoom out">−</button><button type="button" onclick={reset}>Fit field</button></div>{#if image}<a href={image.url} target="_blank" rel="noopener noreferrer">Open full image ↗</a>{/if}{#if !streamlined}<span>{index===null?'Index unavailable':`Field-average index ${index.toFixed(2)}`}</span>{/if}</div>
  {#if layer!=='tci'}<div class="image-legend"><span>Lower index</span><div aria-label="Provider colour map 1: low values red through yellow to high values green"></div><span>Higher index</span></div>{/if}
  <p class="image-note">{imageContext(section)} Colours represent the satellite analysis. {result?.environment==='test'?'Sample imagery is displayed in image coordinates and is never placed over your actual farm boundary.':'The image uses provider image coordinates; no unverified geographic alignment is applied.'}</p>
  {/if}
@@ -80,7 +110,7 @@
  {#if message}<p class="image-warning" role="status">{displayText(message)}</p>{/if}
 </section>
 
-{#if layer!=='tci'}<IndexAreaChart product={result?.breakdown} {layer}/>{/if}
+{#if !streamlined&&!healthMode&&!contextOnly&&layer!=='tci'}<IndexAreaChart product={result?.breakdown} {layer}/>{/if}
 <style>
 img.pixelated{image-rendering:pixelated}
 
@@ -88,4 +118,14 @@ img.pixelated{image-rendering:pixelated}
 
  .header-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:end}.image-explorer:fullscreen{overflow:auto;border-radius:0;width:100%;height:100%;background:#123d35}.image-explorer:fullscreen .image-stage{height:calc(100vh - 310px);min-height:300px}.compare-controls{display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding:15px 22px;border-bottom:1px solid #41624e;font-size:11px;color:#d0dfbf}.compare-controls label{display:flex;align-items:center;gap:9px}.compare-controls input{accent-color:#b6d189;width:16px;height:16px}.compare-controls select{background:#eaf0dc;color:#183f32;border-radius:6px;padding:7px;border:0;font:inherit}.compare-controls>span{font-size:10px;color:#a5bea2}.comparing .field-raster.half{right:calc(50% + 16px);left:20px}.comparison-panel{position:absolute;inset:0 0 0 50%;border-left:1px solid #8ca17a60;background:#092b29;overflow:hidden;pointer-events:none}.comparison-raster{position:absolute;inset:32px 20px;transform-origin:center}.comparison-raster img{width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 8px 24px #0006)}.compare-label{position:absolute;top:18px;left:15px;font-size:10px;background:#062c28dd;padding:12px;z-index:1;color:#d5e0c9}.compare-state{position:absolute;inset:80px 24px 24px;display:grid;place-content:center;text-align:center;font-size:12px;color:#c2d2b7}.comparing .image-badge{max-width:calc(50% - 30px)}@media(max-width:760px){.header-actions{gap:5px}.header-actions button{font-size:10px;padding:7px}.comparison-raster{inset:65px 8px 25px}.comparing .field-raster.half{left:8px;right:calc(50% + 8px)}.compare-label{font-size:8px;left:8px}.comparing .image-badge{font-size:8px;left:8px;padding:9px}.comparing .image-badge small{font-size:8px}}
  .image-explorer{border-radius:15px;overflow:hidden;background:#123d35;color:#f7f8ed;border:1px solid #28574b;margin-bottom:24px}header{background:#123d35;height:auto;min-height:78px;color:#fffef5;padding:22px 24px;display:flex;justify-content:space-between;align-items:center;gap:16px}header p{font-size:9px;letter-spacing:.16em;color:#b1c79c;margin:0 0 9px}header h2{font-size:23px;font-weight:500;margin:0}button{font:600 12px 'DM Sans',sans-serif;cursor:pointer;border:1px solid #668578;background:#234f43;color:#fffef5;border-radius:7px;min-height:39px;padding:9px 12px}button:hover:not(:disabled){background:#39654c}button:disabled{opacity:.5;cursor:wait}button:focus-visible,select:focus-visible{outline:3px solid #e3bd5d;outline-offset:2px}.image-controls{display:flex;gap:14px;padding:0 24px 20px}.image-controls label{display:grid;gap:7px;font-size:10px;color:#c4d2bd;flex:1;min-width:0}.image-controls select{border:1px solid #6a8874;border-radius:7px;background:#f4f5e9;color:#123e31;font:500 12px 'DM Sans',sans-serif;padding:11px;min-width:0;width:100%}.image-stage{height:560px;position:relative;overflow:hidden;touch-action:none;outline-offset:-4px;cursor:grab;background-color:#092b29;background-image:linear-gradient(#47645525 1px,transparent 1px),linear-gradient(90deg,#47645525 1px,transparent 1px);background-size:32px 32px}.image-stage.dragging{cursor:grabbing}.field-raster{position:absolute;inset:32px;transform-origin:center;pointer-events:none}.field-raster img{width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 8px 24px #0006)}.image-badge{position:absolute;left:18px;top:18px;background:#062c28dd;border:1px solid #7b9e6e55;padding:10px 12px;border-radius:7px;pointer-events:none;font-size:9px;letter-spacing:.07em}.image-badge small{display:block;font-size:10px;letter-spacing:0;color:#cbdcbe;margin-top:7px}.image-state{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:50px;text-align:center;gap:10px}.image-state h3{font-size:23px;font-weight:500}.image-state p{max-width:450px;font-size:13px;line-height:1.8;color:#bacdbb}.spinner{width:32px;height:32px;border:2px solid #608b6a;border-top-color:#d5e895;border-radius:50%;animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}.image-bottom{display:flex;flex-wrap:wrap;gap:16px;align-items:center;padding:16px 22px;font-size:11px}.image-bottom>span{margin-left:auto;color:#c1d1ba}.image-bottom a{color:#dfedbd}.zoom-tools{display:flex;gap:6px}.zoom-tools button{min-width:38px}.image-legend{display:flex;gap:12px;align-items:center;padding:5px 24px 14px;font-size:10px;color:#cad8bc}.image-legend>div{height:7px;border-radius:5px;flex:1;background:linear-gradient(90deg,#a12e2e,#e8b145,#e9dc78,#86ae49,#278342)}.image-note{font-size:10px!important;line-height:1.8;color:#c2d1b9;padding:0 24px 18px;margin:0}.image-warning{font-size:12px;background:#f5ebc9;color:#533e18;padding:12px 20px;margin:0;line-height:1.7}@media(max-width:760px){header{padding:20px}header h2{font-size:20px}header button span{display:none}.image-controls{padding:0 20px 18px;flex-direction:column}.image-stage{height:420px}.image-state{padding:32px}.image-bottom>span{margin:0;flex-basis:100%}}@media(prefers-reduced-motion:reduce){.spinner{animation:none}}
+ .health-view header{min-height:0;padding-block:14px}.health-view .quick-controls{padding-block:10px}.health-view .image-stage{height:clamp(340px,44vw,510px)}
+ .quick-controls{align-items:end;padding-top:14px}
+ .quick-controls label{font-size:13px}
+ @media(max-width:640px){.image-controls.quick-controls{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}.quick-controls label{width:100%}}
+ .quick-layers,.quick-comparison{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+ .quick-layers button,.quick-comparison button{padding:10px 12px;border-radius:8px;border:1px solid #809e8d;background:#fffef8;color:#153e30;font-size:14px;font-weight:600}
+ .quick-layers button[aria-pressed="true"]{background:#d8e9a2;border-color:#d8e9a2}
+ .quick-comparison{justify-content:space-between;padding:12px 18px;background:#e8f0e2}
+ .quality{color:#153e30;font-size:14px;font-weight:700}
+  .context-observation{margin:0;padding:10px 24px;font-size:14px;color:#dbe6cd}
 </style>

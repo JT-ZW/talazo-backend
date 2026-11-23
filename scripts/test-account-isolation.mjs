@@ -25,6 +25,7 @@ try{
   if(i<2)await db.query("insert into talazo_accounts(user_id,email,name,approved_by) values($1,$2,'Disposable isolation QA',$3)",[user.id,email,approver]);
  }
  const [a,b,unapproved]=users;
+ const reportingMonth=new Intl.DateTimeFormat('sv-SE',{timeZone:'Africa/Harare',year:'numeric',month:'2-digit'}).format(new Date());
  for(const user of [a,b]){const r=await action(user,'/login',{email:user.email,password:user.password});assert.equal(r.type,'redirect');assert.equal(r.location,'/portal/overview');}
  assert.equal((await action(unapproved,'/login',{email:unapproved.email,password:unapproved.password})).type,'failure');
  const anon=await fetch(origin+'/portal/overview',{redirect:'manual'});assert.equal(anon.status,303);
@@ -32,6 +33,11 @@ try{
   const r=await action(user,'/portal/farms?/farm',{name:'Isolated '+user.id,district:'QA only',owner:approver});assert.equal(r.type,'success',r.data.message);farms.push(r.data.savedFarm);
   assert.equal((await db.query('select owner_id from talazo_farms where id=$1',[r.data.savedFarm])).rows[0].owner_id,user.id,'Submitted owner cannot transfer ownership');
  }
+ assert.equal((await action(a,'/portal/farms?/editFarm',{farm:farms[0],name:'Updated QA farm',district:'QA'})).type,'success');
+ assert.equal((await action(b,'/portal/farms?/editFarm',{farm:farms[0],name:'Unauthorized edit',district:'QA'})).type,'failure');
+ assert.equal((await action(a,'/portal/account?/supportRequest',{category:'field',subject:'Disposable boundary question',message:'QA request'})).type,'success');
+ const ticket=(await db.query('select id from talazo_support_requests where requester=$1',[a.id])).rows[0].id;
+ assert.equal((await action(b,'/admin/support?/supportReply',{request:ticket,status:'resolved',reply:'Unauthorized reply'})).status,403);
  const polygon={type:'Polygon',coordinates:[[[31,-17],[31.001,-17],[31.001,-17.001],[31,-17.001],[31,-17]]]};
  const field={farm:farms[0],name:'Private QA field',boundary:JSON.stringify(polygon),crop_name:'Potatoes',sowing:'2026-10-01',notes:'Disposable isolation test'};
  assert.equal((await action(b,'/portal/farms?/zone',field)).type,'failure');
@@ -48,9 +54,13 @@ try{
  const publicKey=process.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY||process.env.PUBLIC_SUPABASE_ANON_KEY;
  const api=createClient(process.env.SUPABASE_URL,publicKey,{auth:{persistSession:false,autoRefreshToken:false}});
  assert(!(await api.auth.signInWithPassword({email:a.email,password:a.password})).error);
+ assert.equal((await api.from('talazo_support_requests').select('id').eq('id',ticket)).data.length,1);
+ assert.equal((await api.from('talazo_support_requests').update({status:'resolved'}).eq('id',ticket).select('id')).data.length,0);
  const tables=[['talazo_farms','id',farms[0]],['talazo_zones','id',z],['talazo_monitoring','id',m],['talazo_observations','monitoring_id',m],['talazo_weather','zone_id',z],['talazo_field_activities','zone_id',z],['talazo_products','monitoring_id',m]];
  for(const [table,column,id] of tables){const r=await api.from(table).select('*').eq(column,id);assert(!r.error,table);assert.equal(r.data.length,1,'Owner reads '+table);}
  await api.auth.signInWithPassword({email:b.email,password:b.password});
+ assert.equal((await api.from('talazo_support_requests').select('id').eq('id',ticket)).data.length,0);
+ assert((await api.from('talazo_impact_entries').insert({metric:'training',period:reportingMonth+'-01',value:1,evidence:'Unauthorized QA entry'})).error);
  for(const [table,column,id] of tables){const r=await api.from(table).select('*').eq(column,id);assert(!r.error,table);assert.equal(r.data.length,0,'Unrelated farmer cannot read '+table);}
  assert.equal((await api.rpc('talazo_is_admin')).data,false,'Editable metadata grants no admin rights');
  assert((await api.from('talazo_farms').insert({name:'Bypass',owner_id:b.id})).error);
@@ -64,13 +74,16 @@ try{
  for(const [table,column,id] of tables)assert.equal((await api.from(table).select('*').eq(column,id)).data.length,0,'Suspended access denied '+table);
  assert.equal((await action(a,'/login',{email:a.email,password:a.password})).type,'failure');
  await db.query('insert into platform_admins(user_id) values($1)',[b.id]);
- for(const section of ['overview','users','quota','requests','operations','crops'])assert.equal((await fetch(origin+'/admin/'+section,{headers:{Cookie:b.cookie()}})).status,200,'Admin page '+section);
+ for(const section of ['overview','users','quota','requests','operations','crops','impact','support'])assert.equal((await fetch(origin+'/admin/'+section,{headers:{Cookie:b.cookie()}})).status,200,'Admin page '+section);
+ assert.equal((await action(b,'/admin/support?/supportReply',{request:ticket,status:'resolved',reply:'QA resolved'})).type,'success');
+ assert.equal((await db.query('select reply from talazo_support_requests where id=$1',[ticket])).rows[0].reply,'QA resolved');
+ assert.equal((await action(b,'/admin/impact?/impactEntry',{metric:'training',period:reportingMonth,value:1,evidence:'Disposable QA entry'})).type,'success');
  await db.query('delete from platform_admins where user_id=$1',[b.id]);
  assert.equal((await action(b,'/portal/account?/signout',{})).type,'redirect');
  assert.equal((await fetch(origin+'/portal/overview',{headers:{Cookie:b.cookie()},redirect:'manual'})).status,303);
- const unsafe=(await db.query("select table_name,privilege_type from information_schema.role_table_grants where table_schema='public' and table_name like 'talazo\_%' and grantee in ('anon','authenticated') and privilege_type<>'SELECT'" )).rows;
- assert.equal(unsafe.length,0,'No direct write, TRUNCATE, TRIGGER or REFERENCES grants');
- console.log('PASS: password login/logout, unapproved and suspended rejection, owner assignment, field setup/request/activity, seven-table owner/cross-user/suspended isolation, forged admin metadata, direct writes and quota escalation denied, admin route and imagery API denied, cross-origin form rejected, least-privilege grants.');
+ const unsafe=(await db.query("select table_name,privilege_type from information_schema.role_table_grants where table_schema='public' and table_name like 'talazo\_%' and grantee in ('anon','authenticated') and privilege_type<>'SELECT' and not (table_name='talazo_impact_entries' and grantee='authenticated' and privilege_type='INSERT')")).rows;
+ assert.equal(unsafe.length,0,'No unexpected table-wide mutation grants');
+ console.log('PASS: password login/logout, unapproved and suspended rejection, owner assignment, field setup/request/activity, seven-table owner/cross-user/suspended isolation, forged admin metadata, direct writes and quota escalation denied, admin route and imagery API denied, cross-origin form rejected, farm editing, support privacy and replies, impact admin writes and least-privilege grants.');
 }catch(e){console.error('Isolation assertion:',e.message);process.exitCode=1;}finally{
  const owned=(await db.query('select id from talazo_farms where owner_id=any($1::uuid[])',[users.map(u=>u.id)])).rows;
  for(const {id} of owned){
@@ -79,6 +92,10 @@ try{
   await db.query('delete from talazo_zones where farm_id=$1',[id]);
   await db.query('delete from talazo_farms where id=$1',[id]);
  }
- for(const u of users){await db.query('delete from platform_admins where user_id=$1',[u.id]);await db.query('delete from talazo_events where actor=$1',[u.id]);await db.query('delete from talazo_accounts where user_id=$1',[u.id]);const r=await service.auth.admin.deleteUser(u.id);if(r.error)throw Error('Disposable QA identity cleanup failed');}
+ for(const u of users){
+  await db.query('delete from talazo_support_requests where requester=$1',[u.id]);
+  await db.query('delete from talazo_impact_entries where recorded_by=$1',[u.id]);
+  await db.query('delete from platform_admins where user_id=$1',[u.id]);await db.query('delete from talazo_events where actor=$1',[u.id]);await db.query('delete from talazo_accounts where user_id=$1',[u.id]);const r=await service.auth.admin.deleteUser(u.id);if(r.error)throw Error('Disposable QA identity cleanup failed');
+ }
  await db.end();
 }

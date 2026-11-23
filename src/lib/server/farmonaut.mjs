@@ -16,7 +16,7 @@ export function farmonaut({key,testMode='true',fetcher=fetch}) {
    let response;
    try { response=await fetcher(`${FARMONAUT_BASE}/${endpoint}`,{
     method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},
-    body:JSON.stringify({...body,isTesting:testing}),signal:AbortSignal.timeout(45000)
+    body:JSON.stringify({...body,isTesting:testing}),signal:AbortSignal.timeout(endpoint==='generate_geotif_file'?60000:45000)
    }); } catch { throw new ProviderError('Provider request timed out or connection failed',true); }
    let data;
    try {data=await response.json();} catch {throw new ProviderError(`Provider returned ${response.ok?'an unreadable response':'HTTP '+response.status} (${response.headers.get('content-type')?.split(';')[0]||'unknown content type'})`,true);}

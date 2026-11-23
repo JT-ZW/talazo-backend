@@ -1,10 +1,48 @@
 <script lang="ts">
- let {series={}}: {series?:Record<string,unknown>}=$props();
- let points=$derived(Object.entries(series).filter(([date,value])=>/^\d{8}$/.test(date)&&value!==null&&value!==''&&Number.isFinite(Number(value))&&Number(value)>=0&&Number(value)<=100).sort(([a],[b])=>a.localeCompare(b)));
- let path=$derived(points.map(([,v],i)=>`${points.length===1?300:40+i*520/(points.length-1)},${160-Number(v)*1.3}`).join(' '));
+ import {validDate} from './calendar.mjs';
+ import {normalizeIndex} from './satellite.mjs';
+ let {series={},moisture}: {series?:Record<string,unknown>;moisture?:Record<string,unknown>}=$props();
+ let metric=$state<'vegetation'|'moisture'>('vegetation');
+ let values=$derived(metric==='moisture'&&moisture?moisture:series);
+ let dates=$derived([...new Set([...Object.keys(series),...Object.keys(moisture||{})])].filter(date=>/^\d{8}$/.test(date)).sort());
+ const iso=(date:string)=>date.slice(0,4)+'-'+date.slice(4,6)+'-'+date.slice(6);
+ const timestamp=(date:string)=>Date.parse(iso(date)+'T00:00:00Z');
+ let days=$derived(dates.filter(date=>validDate(iso(date))));
+ let first=$derived(timestamp(days[0]||''));
+ let last=$derived(timestamp(days.at(-1)||''));
+ const x=(date:string)=>last===first?307:44+526*(timestamp(date)-first)/(last-first);
+ let readings=$derived(days.flatMap(date=>{
+  const value=normalizeIndex(values[date]);
+  return value===null?[]:[{date,value}];
+ }));
 </script>
-{#if points.length}
- <svg viewBox="0 0 600 205" role="img" aria-label="Vegetation index observations over time; values are listed below"><line x1="40" y1="160" x2="560" y2="160" stroke="#dce2d4"/><line x1="40" y1="95" x2="560" y2="95" stroke="#e9eee4"/><line x1="40" y1="30" x2="560" y2="30" stroke="#e9eee4"/><text x="0" y="35">1.0</text><text x="0" y="100">0.5</text><text x="0" y="165">0.0</text><polyline points={path} fill="none" stroke="#517743" stroke-width="3"/>{#each points as [date,v],i}<circle cx={points.length===1?300:40+i*520/(points.length-1)} cy={160-Number(v)*1.3} r="4" fill="#517743"><title>{date}: {Number(v)/100}</title></circle>{/each}</svg>
- <details><summary>View observation values</summary><dl>{#each points as [date,v]}<div><dt>{date.slice(0,4)}-{date.slice(4,6)}-{date.slice(6)}</dt><dd>{(Number(v)/100).toFixed(2)}</dd></div>{/each}</dl></details>
-{:else}<div class="p-empty compact"><h3>A trend starts with observations.</h3><p>There are no index values available for this growing area yet.</p></div>{/if}
-<style>svg{width:100%;max-height:270px}text{font-size:12px;fill:#647366}details{font-size:12px}dl>div{display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid #e9eee4}dd{margin:0}</style>
+{#if moisture}
+ <div class="p-page-tabs" role="group" aria-label="Observation index">
+  <button type="button" aria-pressed={metric==='vegetation'} onclick={()=>metric='vegetation'}>Vegetation</button>
+  <button type="button" aria-pressed={metric==='moisture'} onclick={()=>metric='moisture'}>Moisture</button>
+ </div>
+{/if}
+<p class="trend-note">{metric==='moisture'?'NDMI tracks vegetation moisture from satellite imagery.':'NDVI shows how green and dense vegetation appears from satellite imagery.'} Dates without usable readings have no plotted point.</p>
+{#if readings.length}
+ <svg viewBox="0 0 620 225" role="img" aria-label={metric==='moisture'?'Moisture index observations by date':'Vegetation index observations by date'}>
+  {#each [1,0.5,0] as value}
+   {@const y=184-value*154}
+   <line x1="44" y1={y} x2="570" y2={y} stroke="#d6e0d0" stroke-dasharray="4 4"/>
+   <text x="5" y={y+5}>{value.toFixed(1)}</text>
+  {/each}
+  {#each readings as reading}
+   <circle cx={x(reading.date)} cy={184-reading.value*154} r="5" fill="#3e704e"><title>{iso(reading.date)}: {reading.value.toFixed(2)}</title></circle>
+  {/each}
+  <text x="44" y="214">{iso(days[0])}</text>
+  {#if days.length>1}<text x="570" y="214" text-anchor="end">{iso(days[days.length-1])}</text>{/if}
+ </svg>
+ <details><summary>View dated readings</summary><dl>{#each readings as reading}<div><dt>{iso(reading.date)}</dt><dd>{reading.value.toFixed(2)}</dd></div>{/each}</dl></details>
+{:else}<div class="p-empty compact"><h3>No usable readings yet</h3><p>Readings will appear here when observations are available for this field.</p></div>{/if}
+<style>
+ svg{display:block;width:100%;max-height:340px;margin:16px auto}
+ text{font-size:15px;fill:#506350}
+ .trend-note,details{font-size:14px}
+ .trend-note{color:#506350}
+ dl>div{display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid #e9eee4}
+ dd{margin:0}
+</style>

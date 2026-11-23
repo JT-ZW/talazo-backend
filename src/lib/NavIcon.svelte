@@ -1,4 +1,4 @@
-﻿<script lang="ts">
+<script lang="ts">
  let {name}:{name:string}=$props();
  const paths:Record<string,string>={
  overview:'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z',
@@ -18,6 +18,8 @@
  quota:'M3 7h18v14H3V7Zm3 0V3h12v4M3 12h18M8 16h3m3 0h2',
  requests:'M7 3h10v3H7V3Zm0 1H4v18h16V4h-3m-9 9 3 3 6-6',
  operations:'M3 12h4l3-8 4 16 3-8h4',
+ support:'M4 13v-1a8 8 0 0 1 16 0v4a4 4 0 0 1-4 4h-4M4 12h3v6H4zm13 0h3v6h-3z',
+ impact:'M3 20h18M6 16v-4m6 4V9m6 7V5M4 9l6-5 4 2 6-4',
  crops:'M3 21h18M6 17v-4m6 4v-7m6 7V5M4 8c3 0 5 1 5 4M12 7c0-4 3-5 6-5',
  switch:'M4 7h15m-4-4 4 4-4 4M20 17H5m4-4-4 4 4 4',
  logout:'M10 3H4v18h6m4-14 5 5-5 5m-5-5h12',

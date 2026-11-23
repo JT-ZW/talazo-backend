@@ -24,25 +24,31 @@ try{
  await page.getByRole('button',{name:'Show password',exact:true}).click();await expect(page.getByLabel('Password',{exact:true})).toHaveAttribute('type','text');
  await page.getByRole('button',{name:'Hide password',exact:true}).click();await expect(page.getByLabel('Password',{exact:true})).toHaveAttribute('type','password');
  await page.getByRole('button',{name:/Sign in to Talazo/}).click();await page.waitForURL('**/admin/overview');
- for(const section of ['overview','users','quota','requests','operations','crops']){await page.goto(base+'/admin/'+section);await expect(page.locator('main h1')).toBeVisible();checked.push('admin/'+section);if(section==='operations'){await expect(page.getByRole('heading',{name:'Your satellite account fields',exact:true})).toBeVisible();await expect(page.getByText('Unassigned · admin only',{exact:true}).first()).toBeVisible();await page.screenshot({path:'test-results/browser/provider-inventory-desktop.png',fullPage:true});}}
+ for(const section of ['overview','users','quota','requests','operations','crops','impact','support']){await page.goto(base+'/admin/'+section);await expect(page.locator('main h1')).toBeVisible();checked.push('admin/'+section);if(section==='operations'){await expect(page.getByRole('heading',{name:'Your satellite account fields',exact:true})).toBeVisible();await expect(page.getByText('Unassigned · admin only',{exact:true}).first()).toBeVisible();await page.screenshot({path:'test-results/browser/provider-inventory-desktop.png',fullPage:true});}}
  await page.screenshot({path:'test-results/browser/admin-desktop.png',fullPage:true});
  for(const section of ['overview','satellite','health','pests','weeds','nutrients','irrigation','yield','soil','weather','analysis','account']){
   await page.goto(base+'/portal/'+section);await expect(page.locator('main h1')).toBeVisible();checked.push('portal/'+section);
   if(section==='overview'){
-   await page.getByRole('button',{name:'Original satellite image',exact:true}).first().click();const img=page.locator('.image-stage img').first();await expect(img).toBeVisible({timeout:90000});await expect.poll(()=>img.evaluate(el=>el.complete&&el.naturalWidth>0)).toBe(true);
+   await expect(page.getByRole('heading',{name:'Latest field update'})).toBeVisible();
+   await expect(page.locator('.image-explorer')).toHaveCount(0);
    await page.screenshot({path:'test-results/browser/dashboard-desktop.png',fullPage:true});
+  }
+  if(section==='satellite'){
+   await page.getByRole('button',{name:'Original satellite image',exact:true}).first().click();const img=page.locator('.image-stage img').first();await expect(img).toBeVisible({timeout:90000});await expect.poll(()=>img.evaluate(el=>el.complete&&el.naturalWidth>0)).toBe(true);
    const plus=page.getByRole('button',{name:'Zoom in',exact:true});await plus.click();await expect(page.locator('.field-raster').first()).toHaveAttribute('style',/1.25/);await page.getByRole('button',{name:'Fit field',exact:true}).click();
   }
  }
  await page.goto(base+'/portal/farms');
- await expect(page.getByRole('heading',{name:'Keep your growing season current.',exact:true})).toBeVisible();
- await page.getByText('Request a field change',{exact:true}).click();await expect(page.getByRole('button',{name:'Submit for review',exact:true})).toBeVisible();await page.getByText('Request a field change',{exact:true}).click();
+ await page.getByRole('button',{name:'Changes and history',exact:true}).click();
+ await page.getByText('Request a field change',{exact:true}).click();await expect(page.getByRole('button',{name:'Submit for review',exact:true})).toBeVisible();await page.getByRole('dialog').getByRole('button',{name:'Close',exact:true}).click();
 
+ await page.getByRole('button',{name:'Add a field',exact:true}).click();
  await expect(page.getByRole('button',{name:'Street',exact:true})).toBeEnabled({timeout:45000});
  await page.getByRole('button',{name:'Open calendar: Actual planting date',exact:true}).click();
  await expect(page.getByRole('dialog',{name:'Actual planting date'})).toBeVisible();
  await page.screenshot({path:'test-results/browser/calendar-desktop.png'});
  await page.keyboard.press('Escape');await expect(page.getByRole('dialog',{name:'Actual planting date'})).toHaveCount(0);
+ await expect(page.getByRole('dialog',{name:'Map a new field'})).toBeVisible();
  await page.getByRole('button',{name:'Open calendar: Actual planting date',exact:true}).click();await page.getByRole('button',{name:'Today',exact:true}).click();
  await expect(page.getByRole('textbox',{name:'Actual planting date',exact:true})).toHaveValue(/^\d{4}-\d{2}-\d{2}$/);
  await page.locator('.boundary-map').scrollIntoViewIfNeeded();
@@ -64,20 +70,28 @@ try{
  await expect(page.getByRole('button',{name:'Add more corners',exact:true})).toBeEnabled();
  checked.push('map modes, coordinate import, area preview, map drawing/finish; nothing saved');
  for(const [label,width,height] of [['tablet',1024,1000],['mobile',390,844]]){
-  await page.setViewportSize({width,height});await page.goto(base+'/portal/overview');await page.getByRole('button',{name:'Original satellite image',exact:true}).first().click();await expect(page.locator('.image-stage img').first()).toBeVisible({timeout:90000});
+  await page.setViewportSize({width,height});await page.goto(base+'/portal/overview');await expect(page.getByRole('heading',{name:'Latest field update'})).toBeVisible();await expect(page.locator('.image-explorer')).toHaveCount(0);
   const overflow=await page.evaluate(()=>({content:document.documentElement.scrollWidth,viewport:document.documentElement.clientWidth}));expect(overflow.content).toBeLessThanOrEqual(overflow.viewport+1);
   await page.screenshot({path:`test-results/browser/dashboard-${label}.png`,fullPage:true});
   if(label==='mobile'){
    await page.getByRole('button',{name:'Menu',exact:true}).click();await page.getByRole('button',{name:'Close navigation',exact:true}).click();
    await expect(page.locator('.p-sidebar')).toBeHidden();
    await page.getByRole('button',{name:'Menu',exact:true}).click();await expect(page.getByRole('navigation',{name:'Main navigation'})).toBeVisible();
-   await page.getByRole('link',{name:'Pests & diseases',exact:true}).first().click();await page.waitForURL('**/portal/pests');await page.getByRole('button',{name:'Original satellite image',exact:true}).first().click();
+   await page.getByRole('link',{name:'Pests & diseases',exact:true}).first().click();await page.waitForURL(url=>url.pathname==='/portal/pests');await page.getByRole('button',{name:'View satellite imagery',exact:true}).click();await page.getByRole('button',{name:'Original satellite image',exact:true}).first().click();
    await expect(page.locator('.image-stage img').first()).toBeVisible({timeout:90000});
    await expect.poll(()=>page.locator('.image-stage img').first().evaluate(el=>el.complete&&el.naturalWidth>0)).toBe(true);
    await page.screenshot({path:'test-results/browser/pests-mobile.png',fullPage:true});
   }
  }
- await page.setViewportSize({width:1440,height:1000});await page.goto(base+'/portal/account');await expect(page.locator('#portal-menu-toggle')).toBeEnabled();await expect(page.getByRole('button',{name:'Save alert preference',exact:true})).toBeVisible();await page.getByLabel('In-app stress alerts',{exact:true}).selectOption('true');await page.getByRole('button',{name:'Save alert preference',exact:true}).click();await expect(page.getByText('In-app alert preferences saved.',{exact:true}).first()).toBeVisible();await page.getByRole('button',{name:'Sign out',exact:true}).click();await page.waitForURL('**/login');
+ await page.setViewportSize({width:1440,height:1000});
+ await page.goto(base+'/portal/account');
+ await expect(page.locator('#portal-menu-toggle')).toBeEnabled();
+ await page.getByLabel('In-app stress alerts',{exact:true}).selectOption('true');
+ const preferenceResponse=page.waitForResponse(response=>response.request().method()==='POST'&&response.url().endsWith('?/alertPreferences'));
+ await page.getByRole('button',{name:'Save alert preference',exact:true}).click();
+ expect((await (await preferenceResponse).json()).type).toBe('success');
+ await expect(page.getByText('In-app alert preferences saved.',{exact:true}).first()).toBeVisible({timeout:20000});
+ await page.getByRole('button',{name:'Sign out',exact:true}).click();await page.waitForURL('**/login');
  expect(errors).toEqual([]);console.log(JSON.stringify({passed:true,pages:checked,pageErrors:errors.length,captures:'test-results/browser',disposableIdentity:true}));
 }catch(e){console.error('Browser QA failed:',e.message);process.exitCode=1;}finally{
  await browser?.close();if(id){await db.query('delete from platform_admins where user_id=$1',[id]);await db.query('delete from talazo_accounts where user_id=$1',[id]);if((await service.auth.admin.deleteUser(id)).error)throw Error('Browser identity cleanup failed');}await db.end();

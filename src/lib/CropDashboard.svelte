@@ -1,39 +1,133 @@
 <script lang="ts">
- import {untrack} from 'svelte';
- import ImageExplorer from './ImageExplorer.svelte';
- import ProviderConnection from './ProviderConnection.svelte';
  import ObservationTrend from './ObservationTrend.svelte';
+ import BoundaryMap from './BoundaryMap.svelte';
  import {sensedMap,normalizeIndex} from './satellite.mjs';
- import {datedAdvisory,healthShares} from './advisory-model.mjs';
- let {data}:{data:any}=$props();
- let selected=$state(untrack(()=>data.initialZone||'')),advice=$state<any>(null),observationChoice=$state('');
- let zones=$derived(data.tables.talazo_zones);
+ import {validDate} from './calendar.mjs';
+
+ let {data,field=$bindable('')}:{data:any,field?:string}=$props();
+ const statuses:Record<string,string>={active:'Monitoring',awaiting:'Awaiting first observations',requested:'Awaiting approval',paused:'Paused',uncertain:'Under review',registering:'Registering',error:'Needs attention'};
+ const status=(record:any)=>statuses[record?.status]||'Monitoring not requested';
+ const iso=(value:string)=>value.includes('-')?value:value.replace(/^(\d{4})(\d{2})(\d{2})$/,'$1-$2-$3');
+ const dateLabel=(value:string)=>new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'}).format(new Date(iso(value)+'T00:00:00Z'));
+ const hectares=(value:number)=>new Intl.NumberFormat('en',{maximumFractionDigits:3}).format(value/10000);
  let records=$derived(data.tables.talazo_monitoring.filter((m:any)=>m.environment===data.environment));
- let active=$derived(zones.filter((z:any)=>records.some((m:any)=>m.zone_id===z.id&&m.status==='active')));
- let zone=$derived(active.find((z:any)=>z.id===selected)||active[0]);
- let record=$derived(records.find((m:any)=>m.zone_id===zone?.id));
- let products=$derived(data.tables.talazo_observations.find((o:any)=>o.monitoring_id===record?.id)?.data?.products||{});
- let dates=$derived(Object.keys(sensedMap(products.getSensedDays?.value)).sort().reverse());
- let date=$derived(dates.includes(observationChoice)?observationChoice:dates[0]);
- let shares=$derived(healthShares(datedAdvisory(advice,date)?.Satellite_Data));
- let ndvi=$derived(normalizeIndex(products.getAllIndexValues?.value?.ndvi?.[date]));
- const ha=(n:number)=>new Intl.NumberFormat('en',{maximumFractionDigits:3}).format(n/10000);
- const day=(d:string)=>d?`${d.slice(6)}/${d.slice(4,6)}/${d.slice(0,4)}`:'Awaiting observations';
- const farm=(id:string)=>data.tables.talazo_farms.find((f:any)=>f.id===id)?.name||'Farm';
- const status=(s:string)=>({active:'Monitoring',awaiting:'Processing first observations',requested:'Awaiting approval',paused:'Paused',uncertain:'Administrator review needed',registering:'Registering',error:'Needs attention'}[s]||'Not requested');
- let allocation=$derived(data.tables.talazo_allocations.filter((a:any)=>a.period===data.period).reduce((n:number,a:any)=>n+Number(a.sqm),0));
- let committed=$derived(zones.filter((z:any)=>records.some((m:any)=>m.zone_id===z.id&&['active','awaiting','registering','uncertain'].includes(m.status))).reduce((n:number,z:any)=>n+Number(z.area_sqm),0));
+ let fields=$derived(data.tables.talazo_zones.map((zone:any)=>{
+  const record=records.find((m:any)=>m.zone_id===zone.id);
+  const products=data.tables.talazo_observations.find((o:any)=>o.monitoring_id===record?.id)?.data?.products;
+  const sensed=sensedMap(products?.getSensedDays?.value);
+  const dates=Object.keys(sensed).filter(date=>validDate(iso(date))).sort().reverse();
+  return {zone,record,sensed,dates,vegetation:products?.getAllIndexValues?.value?.ndvi||{},farm:data.tables.talazo_farms.find((f:any)=>f.id===zone.farm_id)?.name||'Farm'};
+ }));
+ let selected=$derived(fields.find((item:any)=>item.zone.id===field)||fields.find((item:any)=>item.record?.status==='active')||fields[0]);
+ $effect(()=>{if(selected&&field!==selected.zone.id)field=selected.zone.id;});
+ let latest=$derived(selected?.dates[0]);
+ let cloudy=$derived(Boolean(latest&&selected.sensed[latest]?.isCloudy));
+ let comparable=$derived((selected?.dates||[]).filter((date:string)=>!selected.sensed[date]?.isCloudy&&normalizeIndex(selected.vegetation[date])!==null));
+ let current=$derived(normalizeIndex(selected?.vegetation[comparable[0]]));
+ let previous=$derived(normalizeIndex(selected?.vegetation[comparable[1]]));
+ let change=$derived(current===null||previous===null?null:Math.round((current-previous)*100)/100);
+ let trend=$derived(Object.fromEntries((selected?.dates||[]).map((date:string)=>[date,selected.sensed[date]?.isCloudy?null:selected.vegetation[date]])));
+ let alerts=$derived((data.alerts||[]).filter((alert:any)=>selected?.record&&alert.monitoring_id===selected.record.id&&!alert.acknowledged_at&&typeof alert.observed_on==='string'&&validDate(iso(alert.observed_on))).sort((a:any,b:any)=>iso(b.observed_on).localeCompare(iso(a.observed_on))).slice(0,3));
+ const fieldLink=(section:string,id:string,date?:string)=>'/portal/'+section+'?'+new URLSearchParams({field:id,...(date?{date:iso(date).replaceAll('-','')}:{})});
 </script>
-<div class="p-stats"><article><span>Fields in view</span><strong>{active.length}<em> / {zones.length}</em></strong><small>Active satellite monitoring</small></article><article><span>Monitored land</span><strong>{ha(committed)} <em>ha</em></strong><small>Committed across your fields</small></article><article><span>Available allocation</span><strong>{ha(Math.max(0,allocation-committed))} <em>ha</em></strong><small>{ha(allocation)} ha allocated · {data.period.slice(0,7)}</small></article><article><span>Awaiting approval</span><strong>{records.filter((m:any)=>m.status==='requested').length}</strong><small>Talazo reviews each field</small></article></div>
-{#if zone&&record}
- <div class="dashboard-heading"><div><p class="p-kicker">FIELD OBSERVATORY</p><h2>See your land. Follow the change.</h2></div><label class="p-field">Your monitored field<select value={zone?.id||''} onchange={e=>{selected=e.currentTarget.value;observationChoice='';advice=null;}}>{#each active as z}<option value={z.id}>{farm(z.farm_id)} / {z.name}</option>{/each}</select></label></div>
- {#key record.id}
- <ProviderConnection {record}/>
- <div class="dashboard-observatory"><section class="dashboard-brief"><p class="p-kicker">{farm(zone.farm_id)}</p><h2>{zone.name}</h2><p>{zone.crop_entered_name||zone.crop_name} · {ha(Number(zone.area_sqm))} ha</p><div class="dashboard-index"><span>Vegetation index / NDVI</span><strong>{ndvi===null?'—':ndvi.toFixed(2)}</strong><small>Optical observation · {day(date)}</small></div><h3>Crop condition</h3>{#each shares.filter(s=>s.percent!==null) as share}<div class="dashboard-share"><span>{share.label}</span><strong>{share.percent}%</strong><progress max="100" value={share.percent??0} aria-label={share.label}></progress></div>{:else}<p class="p-caption">Condition shares appear when the dated advisory is available.</p>{/each}<p class="p-caption">Provider classifications and estimates. Colours indicate where to inspect; they do not confirm a pest or nutrient diagnosis.</p><a class="p-button lime" href={'/portal/health?field='+zone.id}>Review crop health ↗</a><a class="dashboard-weather" href={'/portal/weather?field='+zone.id}>Weather & rainfall forecast ↗</a></section><div class="dashboard-imagery"><ImageExplorer boundary={zone.boundary} {record} {products} {date} bind:advisoryProduct={advice} onObservationChange={(value:string)=>observationChoice=value}/></div></div>
- <section class="p-card"><div class="p-section-heading"><div><p class="p-kicker">{zone.name} / OBSERVATION HISTORY</p><h2>Vegetation through the season</h2></div><a href={'/portal/analysis?field='+zone.id}>Reports & field records ↗</a></div><ObservationTrend series={products.getAllIndexValues?.value?.ndvi||{}}/></section>
- {/key}
-{:else}<section class="p-hero"><div><p class="p-kicker">YOUR FIELD OBSERVATORY</p><h2>Bring your fields into view.</h2><p>Create a farm, map its fields and request monitoring. Once approved, dated satellite imagery and crop guidance appear here.</p><a class="p-button lime" href="/portal/farms">Set up my land ↗</a></div></section>{/if}
-<section class="p-card"><div class="p-section-heading"><div><p class="p-kicker">YOUR FIELD PORTFOLIO</p><h2>Every growing area, accounted for.</h2></div><a href="/portal/farms">Manage fields ↗</a></div><div class="dashboard-fields">{#each zones as z}{@const m=records.find((m:any)=>m.zone_id===z.id)}<a class="dashboard-field" href={m?.status==='active'?'/portal/satellite?field='+z.id:'/portal/farms'}><span class="p-kicker">{farm(z.farm_id)}</span><h3>{z.name}</h3><p>{z.crop_entered_name||z.crop_name} · {ha(Number(z.area_sqm))} ha</p><span class="p-pill">{status(m?.status)}</span><small>{m?.last_sync?'Last retrieved '+new Date(m.last_sync).toLocaleString('en-GB',{timeZone:'Africa/Harare'}):'No observations retrieved yet'}</small></a>{:else}<p>Start by adding your first farm and field.</p>{/each}</div></section>
+
+{#if selected}
+ {#if fields.length>1}
+  <section class="p-card" aria-labelledby="my-fields-heading">
+   <div class="p-section-heading"><h2 id="my-fields-heading">My fields at a glance</h2><a href="/portal/farms">Manage fields &nearr;</a></div>
+   <ul class="field-list">
+    {#each fields as item (item.zone.id)}
+     <li><button type="button" aria-pressed={item.zone.id===selected.zone.id} onclick={()=>field=item.zone.id}>
+      <span><strong>{item.zone.name}</strong><small>{item.farm} &middot; {item.zone.crop_entered_name||item.zone.crop_name}</small></span>
+      <span class="field-list-status"><span class="p-pill">{status(item.record)}</span><small>{item.dates[0]?'Observed '+dateLabel(item.dates[0]):'No observation yet'}</small></span>
+     </button></li>
+    {/each}
+   </ul>
+  </section>
+ {/if}
+
+ <section class="p-card field-overview" aria-labelledby="field-snapshot-heading">
+  <div class="field-snapshot">
+   <p class="p-kicker">{selected.farm}</p>
+   <h2 id="field-snapshot-heading">{selected.zone.name}</h2>
+   <p>{selected.zone.crop_entered_name||selected.zone.crop_name} &middot; {hectares(selected.zone.area_sqm)} ha</p>
+   <span class="p-pill">{status(selected.record)}</span>
+
+   <div class="field-update" aria-live="polite">
+    <h3>Latest field update</h3>
+    {#if latest}
+     <p class="observation-date">Satellite observation &middot; <time datetime={iso(latest)}>{dateLabel(latest)}</time></p>
+     {#if cloudy}<p>Clouds affected this observation, so it cannot be used to compare vegetation.</p>
+     {:else if comparable[0]!==latest}<p>A vegetation reading is unavailable for this observation.</p>
+     {:else if change===null}<p>There is a vegetation reading for this date. A second usable observation is needed to compare changes.</p>{/if}
+     {#if change!==null}
+      <p>{comparable[0]!==latest?'In the latest usable reading ('+dateLabel(comparable[0])+'), vegetation':'Vegetation'} {change===0?'looked about as green as':change>0?'looked greener than':'looked less green than'} on {dateLabel(comparable[1])}.</p>
+     {/if}
+    {:else if selected.record}
+     <p>{selected.record.status==='requested'?'Talazo will review your request. Satellite updates appear after monitoring starts.':selected.record.status==='paused'?'Monitoring is paused for this field.':'Satellite readings will appear here once the first observation is available.'}</p>
+    {:else}
+     <p>Request monitoring to start receiving satellite updates for this field.</p>
+    {/if}
+   </div>
+
+   <div class="field-actions">
+    {#if latest}<a class="p-button" href={fieldLink('satellite',selected.zone.id,comparable[0]||latest)+(change!==null?'#observation-history':'')}>{change!==null?'Compare observations':'View satellite observation'} &nearr;</a>
+    {:else if !selected.record}<a class="p-button" href={'/portal/farms#field-'+encodeURIComponent(selected.zone.id)}>Request monitoring &nearr;</a>
+    {:else}<a class="p-button" href={fieldLink('satellite',selected.zone.id)}>View monitoring status &nearr;</a>{/if}
+    <a class="p-button subtle" href={fieldLink('weather',selected.zone.id)}>Check field weather &nearr;</a>
+   </div>
+  </div>
+  <div class="field-map">
+   {#key selected.zone.id}<BoundaryMap value={JSON.stringify(selected.zone.boundary)} editable={false}/>{/key}
+  </div>
+ </section>
+
+ <section class="p-card recent-changes" aria-labelledby="recent-changes-heading">
+  <div class="p-section-heading"><h2 id="recent-changes-heading">Recent changes</h2>{#if latest}<a href={fieldLink('satellite',selected.zone.id,comparable[0]||latest)+'#observation-history'}>View satellite history &nearr;</a>{/if}</div>
+  {#if alerts.length}
+   <ul class="field-alerts">
+    {#each alerts as alert (alert.id)}
+     <li><span><strong>Vegetation alert</strong><small>{dateLabel(alert.observed_on)} &middot; Satellite readings flagged a drop worth checking in the field.</small></span><a href={fieldLink('health',selected.zone.id,alert.observed_on)}>Review observation &nearr;</a></li>
+    {/each}
+   </ul>
+  {/if}
+  {#if comparable.length}
+   <div class="compact-trend"><ObservationTrend series={trend}/></div>
+  {:else}
+   <p>Usable satellite readings will appear here as they become available.</p>
+  {/if}
+ </section>
+{:else}
+ <section class="p-card p-empty">
+  <h2>Add your first field</h2>
+  <p>Create a farm and draw your field boundary to request satellite monitoring.</p>
+  <a class="p-button" href="/portal/farms">Set up my farm &nearr;</a>
+ </section>
+{/if}
+
 <style>
- .dashboard-heading{display:flex;justify-content:space-between;gap:24px;align-items:end;margin:38px 0 20px}.dashboard-heading h2{font-size:30px;margin:8px 0 0}.dashboard-heading label{min-width:260px}.dashboard-observatory{display:grid;grid-template-columns:minmax(235px,.8fr) minmax(0,2fr);gap:20px;margin-bottom:24px;align-items:start}.dashboard-brief{background:#123f32;color:#fffdf2;padding:28px;border-radius:16px}.dashboard-brief h2{font-size:30px;margin:8px 0}.dashboard-brief>p{font-size:13px}.dashboard-brief .p-kicker{color:#d6df8d}.dashboard-index{padding:24px 0;border-top:1px solid #ffffff26;border-bottom:1px solid #ffffff26;margin:24px 0}.dashboard-index>span,.dashboard-index small{display:block;color:#d0ddcd;font-size:11px}.dashboard-index strong{display:block;font-size:56px;line-height:1.2;margin:8px 0}.dashboard-share{display:grid;grid-template-columns:1fr auto;gap:7px;font-size:11px;margin:15px 0}.dashboard-share progress{grid-column:1/-1;width:100%;height:5px;accent-color:#d2dd8e}.dashboard-brief .p-caption{color:#d0ddcd;line-height:1.7}.dashboard-brief .p-button{width:100%;margin-top:15px}.dashboard-weather{display:block;font-size:12px;margin-top:20px;text-decoration:underline}.dashboard-imagery{min-width:0}.dashboard-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}.dashboard-field{padding:22px;border:1px solid #d8e1d0;border-radius:12px;background:#f6f7ed}.dashboard-field:hover{border-color:#63814b}.dashboard-field h3{margin:10px 0}.dashboard-field p{font-size:12px}.dashboard-field small{display:block;font-size:10px;color:#63745f;margin-top:18px}@media(max-width:1100px){.dashboard-observatory{grid-template-columns:1fr}.dashboard-brief{padding:24px}.dashboard-index{margin:16px 0;padding:16px 0}.dashboard-index strong{font-size:40px}}@media(max-width:700px){.dashboard-heading{display:block}.dashboard-heading label{margin-top:20px;min-width:0}.dashboard-heading h2{font-size:25px}.dashboard-fields{grid-template-columns:1fr}}
+ .field-list,.field-alerts{list-style:none;margin:0;padding:0}
+ .field-list{display:grid;gap:8px}
+ .field-list button,.field-alerts li{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+ .field-list button{width:100%;padding:12px 14px;text-align:left;border-radius:10px;border:1px solid #d8e2d3;background:#fffef9;color:#153e30}
+ .field-list button:hover,.field-list button[aria-pressed="true"]{background:#e7efdf;border-color:#688757}
+ .field-list strong,.field-alerts strong{display:block;font-size:16px;overflow-wrap:anywhere}
+ .field-list small,.field-alerts small{display:block;margin-top:4px;color:#4f6651;font-size:13px}
+ .field-list-status{display:flex;gap:8px 12px;align-items:center;flex-wrap:wrap}
+ .field-list-status small{margin:0}
+ .field-overview{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:24px;align-items:start}
+ .field-snapshot{min-width:0;overflow-wrap:anywhere}
+ .field-snapshot>p:not(.p-kicker){margin-bottom:10px}
+ .field-update{margin-top:22px;padding-top:18px;border-top:1px solid #ccd9c3}
+ .field-update h3{margin:0 0 4px;font-size:19px}
+ .field-update p{margin:0 0 12px}
+ .observation-date{color:#4f6651;font-size:14px}
+ .field-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+ .field-map{min-width:0}
+ .field-map :global(.boundary-map){height:clamp(260px,29vw,360px)}
+ .field-alerts{display:grid;gap:8px;margin-bottom:16px}
+ .field-alerts li{border:1px solid #e2d3a8;background:#f8f1dc;border-radius:10px;padding:12px 14px}
+ .field-alerts a{font-size:14px;text-decoration:underline;text-underline-offset:3px}
+ .compact-trend :global(svg){max-height:215px}
+ @media(max-width:860px){.field-overview{grid-template-columns:minmax(0,1fr)}}
 </style>

@@ -3,6 +3,8 @@ import type {RequestEvent} from '@sveltejs/kit';
 import * as env from '$app/env/private';
 import * as publicEnv from '$app/env/public';
 import {identity,rpc,hectares,month,service,origin,provider,syncMonitoring,safeMessage} from './pilot';
+import {supportCategories,supportStatuses} from '../support';
+import {impactMetrics,isImpactMetric} from '../impact';
 import {sensedMap} from '../satellite.mjs';
 import {weatherPoint,weatherDays} from '../weather.mjs';
 import {standardCrop} from '../crops.mjs';
@@ -30,13 +32,35 @@ async function rows(client:ReturnType<typeof createSupabase>,table:string,keys=[
 
 export async function loadPortal(event:RequestEvent,admin=false) {
  const auth=await identity(event,admin);
- const allowed=admin?['overview','users','quota','requests','operations','crops']:['overview','farms','satellite','weather','analysis','account',...insightPages.map(([id])=>id)];
+ const allowed=admin?['overview','users','quota','requests','operations','crops','impact','support']:['overview','farms','satellite','weather','analysis','account',...insightPages.map(([id])=>id)];
  if(!allowed.includes(event.params.section||'')) error(404,'Page not found');
  const queries=['talazo_farms','talazo_zones','talazo_monitoring','talazo_observations','talazo_periods','talazo_allocations','talazo_weather','talazo_field_activities','talazo_crop_catalog'];
  const keys:Record<string,string[]>={talazo_observations:['monitoring_id'],talazo_periods:['period'],talazo_allocations:['period','user_id'],talazo_weather:['zone_id','environment'],talazo_crop_catalog:['code']};
  const results=await Promise.all(queries.map(t=>rows(auth.client,t,keys[t]||['id'])));
  const tables=Object.fromEntries(queries.map((t,i)=>[t,results[i]]));
  const users=auth.isAdmin?await rows(auth.client,'talazo_accounts',['user_id']):[];
+ let impactEntries:any[]=[];
+ let impactAvailable=true;
+ if(admin&&event.params.section==='impact'){
+  const probe=await auth.client.from('talazo_impact_entries').select('id').limit(1);
+  if(probe.error?.code==='PGRST205'||probe.error?.code==='42P01')impactAvailable=false;
+  else if(probe.error)error(503,'Impact records could not be loaded.');
+  else impactEntries=await rows(auth.client,'talazo_impact_entries');
+ }
+ let supportAvailable=true,supportRequests:any[]=[];
+ if((!admin&&event.params.section==='account')||(admin&&event.params.section==='support')){
+  let probe=auth.client.from('talazo_support_requests').select('id');
+  if(!admin)probe=probe.eq('requester',auth.user.id);
+  const result=await probe.limit(1);
+  if(result.error?.code==='PGRST205'||result.error?.code==='42P01')supportAvailable=false;
+  else if(result.error)error(503,'Support requests could not be loaded.');
+  else if(admin)supportRequests=await rows(auth.client,'talazo_support_requests');
+  else{
+   const own=await auth.client.from('talazo_support_requests').select('*').eq('requester',auth.user.id).order('created_at',{ascending:false}).limit(100);
+   if(own.error)error(503,'Support requests could not be loaded.');
+   supportRequests=own.data||[];
+  }
+ }
  const events=admin?await auth.client.from('talazo_events').select('*').order('created_at',{ascending:false}).limit(30):null;
  const insightZoneIds=activeInsightZoneIds(tables.talazo_farms,tables.talazo_zones,tables.talazo_monitoring,provider().environment);
  const providerFields=admin?await rows(auth.client,'talazo_provider_fields',['provider_id']):[];
@@ -47,7 +71,7 @@ export async function loadPortal(event:RequestEvent,admin=false) {
  const historyRequests=await rows(auth.client,'talazo_history_requests');
  const alertPreference=await auth.client.from('talazo_alert_preferences').select('enabled,ndvi_drop').eq('user_id',auth.user.id).maybeSingle();
  return {admin,isAdmin:auth.isAdmin,section:event.params.section,name:auth.account?.name||'Talazo administrator',userId:auth.user.id,insightZoneIds,
-  tables,users,jobs,changes,alerts,historyRequests,alertPreference:alertPreference.data,providerFields,providerStatus:providerStatus?.data||null,events:events?.data||[],period:month(),environment:provider().environment,initialZone:event.url.searchParams.get('field')||'',
+  tables,users,jobs,changes,alerts,historyRequests,supportAvailable,supportRequests,accountEmail:!admin&&event.params.section==='account'?auth.user.email:null,accountStatus:auth.account?.status,impactEntries,impactAvailable,alertPreference:alertPreference.data,providerFields,providerStatus:providerStatus?.data||null,events:events?.data||[],period:month(),environment:provider().environment,initialZone:event.url.searchParams.get('field')||'',
   liveRegistrationIssue:tables.talazo_monitoring.some((m:any)=>m.environment==='live'&&m.status==='uncertain'),
   emailReady:Boolean(env.RESEND_API_KEY&&env.INVITATION_FROM),providerConfigured:Boolean(env.FARMONAUT_API_KEY),mapsConfigured:Boolean(publicEnv.PUBLIC_GOOGLE_MAPS_API_KEY)};
 }
@@ -61,6 +85,41 @@ async function sendInvitation(email:string,link:string,name:string) {
 }
 /** Form actions remain server-side, use SvelteKit same-origin checks, and never trust a submitted provider ID. */
 export const portalActions={
+ supportRequest:async(event:RequestEvent)=>{
+  const {client}=await identity(event);
+  const form=await event.request.formData();
+  const category=String(form.get('category')||''),subject=String(form.get('subject')||'').trim(),message=String(form.get('message')||'').trim();
+  if(!Object.hasOwn(supportCategories,category)||!subject||subject.length>120||!message||message.length>2000)
+   return fail(400,{message:'Choose a category and enter a subject and message.'});
+  const result=await client.from('talazo_support_requests').insert({category,subject,message});
+  if(result.error)return fail(503,{message:'The support request could not be saved. Please retry or contact your Talazo coordinator.'});
+  return {message:'Support request sent to the Talazo team.'};
+ },
+ supportReply:async(event:RequestEvent)=>{
+  const {client}=await identity(event,true);
+  const form=await event.request.formData();
+  const id=String(form.get('request')||''),status=String(form.get('status')||''),reply=String(form.get('reply')||'').trim();
+  if(!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)||!Object.hasOwn(supportStatuses,status)||reply.length>2000)
+   return fail(400,{message:'Choose a valid status and enter up to 2,000 characters for the response.'});
+  const result=await client.from('talazo_support_requests').update({status,reply}).eq('id',id).select('id').maybeSingle();
+  if(result.error||!result.data)return fail(503,{message:'The support update could not be saved.'});
+  return {message:'Support request updated.'};
+ },
+ impactEntry:async(event:RequestEvent)=>{
+  const {client}=await identity(event,true);
+  const form=await event.request.formData();
+  const metric=String(form.get('metric')||'');
+  const period=String(form.get('period')||'')+'-01';
+  const input=String(form.get('value')||'').trim();
+  const value=Number(input),evidence=String(form.get('evidence')||'').trim();
+  if(!isImpactMetric(metric)||!/^\d{4}-(0[1-9]|1[0-2])-01$/.test(period)||period>month()||
+   !input||!Number.isFinite(value)||value<0||value>impactMetrics[metric].max||
+   ('whole' in impactMetrics[metric]&&!Number.isInteger(value))||!evidence||evidence.length>2000)
+   return fail(400,{message:'Enter a valid metric, reporting month, value and evidence note.'});
+  const result=await client.from('talazo_impact_entries').insert({metric,period,value,evidence});
+  if(result.error)return fail(503,{message:'The impact update could not be saved. Check that the impact database migration is applied.'});
+  return {message:'Impact update recorded.'};
+ },
  alertPreferences:async(event:RequestEvent)=>{const a=await identity(event);const f=await event.request.formData();try{await rpc(a.client,'talazo_set_alert_preferences',{p_enabled:f.get('enabled')==='true',p_threshold:Number(f.get('threshold'))});return {message:'In-app alert preferences saved.'};}catch(e){return fail(400,{message:safeMessage(e)});}},
  acknowledgeAlert:async(event:RequestEvent)=>{const a=await identity(event);const f=await event.request.formData();try{await rpc(a.client,'talazo_acknowledge_alert',{p_id:f.get('alert')});return {message:'Alert marked reviewed.'};}catch(e){return fail(400,{message:safeMessage(e)});}},
  requestHistory:async(event:RequestEvent)=>{
@@ -148,7 +207,11 @@ export const portalActions={
    return {message:'Farm and field name and district synchronized to Farmonaut.'};
   }catch(e){return fail(400,{message:safeMessage(e)});}
  },
- signout:async(event:RequestEvent)=>{await createSupabase(event.cookies).auth.signOut();redirect(303,'/login');},
+ signout:async(event:RequestEvent)=>{
+  const {error}=await createSupabase(event.cookies).auth.signOut();
+  if(error)return fail(503,{message:'Sign-out could not be completed. Please try again.'});
+  redirect(303,'/login');
+ },
  quota:async(event:RequestEvent)=>{
   const a=await identity(event,true);const f=await event.request.formData();
   try{await rpc(a.client,'talazo_set_quota',{p_period:String(f.get('period'))+'-01',p_sqm:hectares(f.get('hectares'))});return {message:'Monthly quota saved.'};}catch(e){return fail(400,{message:safeMessage(e)});}
@@ -197,6 +260,30 @@ export const portalActions={
    if(a.isAdmin&&owner===a.user.id&&!a.account)await rpc(a.client,'talazo_approve',{p_user:a.user.id,p_email:a.user.email,p_name:'Talazo administrator'});
    const farmId=await rpc(a.client,'talazo_add_farm',{p_owner:owner,p_name:String(f.get('name')||''),p_district:String(f.get('district')||'')});return {message:'Farm saved. Add its first field below.',savedFarm:farmId};
   }catch(e){return fail(400,{message:safeMessage(e)});}
+ },
+ editFarm:async(event:RequestEvent)=>{
+  const a=await identity(event);const f=await event.request.formData();
+  try{
+   await rpc(a.client,'talazo_edit_farm',{p_farm:f.get('farm'),p_name:f.get('name'),p_district:f.get('district')});
+   return {message:'Farm details updated.'};
+  }catch(e){return fail(400,{message:safeMessage(e)});}
+ },
+ deleteFarm:async(event:RequestEvent)=>{
+  const a=await identity(event);const f=await event.request.formData();
+  try{await rpc(a.client,'talazo_delete_farm',{p_farm:f.get('farm')});return {message:'Farm deleted.'};}
+  catch(e){return fail(400,{message:safeMessage(e)});}
+ },
+ editZoneNotes:async(event:RequestEvent)=>{
+  const a=await identity(event);const f=await event.request.formData();
+  try{
+   await rpc(a.client,'talazo_edit_zone_notes',{p_zone:f.get('zone'),p_notes:f.get('notes')});
+   return {message:'Field notes updated.'};
+  }catch(e){return fail(400,{message:safeMessage(e)});}
+ },
+ deleteZone:async(event:RequestEvent)=>{
+  const a=await identity(event);const f=await event.request.formData();
+  try{await rpc(a.client,'talazo_delete_zone',{p_zone:f.get('zone')});return {message:'Field deleted.'};}
+  catch(e){return fail(400,{message:safeMessage(e)});}
  },
  zone:async(event:RequestEvent)=>{
   const a=await identity(event);const f=await event.request.formData();
@@ -341,12 +428,12 @@ export const portalActions={
    if(kind==='image'||kind==='recommendations'){
     const output=await providerProduct(a.client,record.data,date,kind==='image'?'image:'+layer:'advisory');
     if(output.state!=='ready')throw new Error(output.error||'This product is processing. Please retry shortly.');
-    return {message:'Provider output retrieved for the selected observation.',assetMonitoring:id,assetDate:date,...(kind==='image'?{asset:output.value.url,assetKind:kind}:{recommendations:output.value.value.advisory})};
+    return {message:'Provider output retrieved for the selected observation.',assetMonitoring:id,assetDate:date,...(kind==='image'?{asset:output.value.url,assetKind:kind,assetLayer:layer}:{recommendations:output.value.value.advisory,advisoryProduct:output.value})};
    }
    const value=await p.call(endpoint,kind==='advisory'?{Fields:{[record.data.provider_id]:[date]}}:{FieldID:record.data.provider_id,SensedDay:date,Language:'en',ImageType:layer});
    const link=value?.url||value?.URL||value?.jeevnAiReporturl;
    if(typeof link!=='string'||new URL(link).protocol!=='https:')throw new Error('Provider did not return a secure asset link.');
-   return {message:p.testing?'Sample output generated.':'Your report is ready.',asset:link,assetKind:kind,assetMonitoring:id,assetDate:date};
+   return {message:p.testing?'Sample output generated.':'Your report is ready.',asset:link,assetKind:kind,assetLayer:layer,assetMonitoring:id,assetDate:date};
   }catch(e){return fail(400,{message:safeMessage(e)});}
  }
 };

@@ -7,7 +7,10 @@ export function celsius(value) {
  if(value===null||value===undefined||value==='')return null;
  const n=Number(value);return Number.isFinite(n)?n-273.15:null;
 }
-/** @param {any} value */
+/**
+ * @param {any} value
+ * @returns {{timestamp:number,min:number|null,max:number|null,description:string,rain:number|null,icon:string,probability:number|null,humidity:number|null,wind:number|null}[]}
+ */
 export function weatherDays(value) {
  const source=value?.normal||value;
  if(!Array.isArray(source?.daily))return [];

@@ -7,3 +7,9 @@ export function freshness(fetched,error,now=Date.now()){
  if(Math.max(0,(now-time)/3600000)>=12)return {state:'stale',label:'Saved data needs a refresh'};
  return {state:'current',label:'Saved data available'};
 }
+
+/** @param {{status:string,last_sync?:string|null,error?:string|null}} record */
+export function monitoringNeedsReview(record){
+ return ['uncertain','error'].includes(record.status)||Boolean(record.error)||
+  (record.status==='active'&&freshness(record.last_sync,null).state!=='current');
+}

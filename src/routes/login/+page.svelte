@@ -2,7 +2,7 @@
  import {enhance} from '$app/forms';import AuthShell from '#lib/AuthShell.svelte';
  import PasswordField from '#lib/PasswordField.svelte';import {feedbackForm} from '#lib/feedback.ts';
  let {data,form}=$props();let busy=$state(false);
- const submit=feedbackForm({pending:'Signing you in',success:'You’re signed in. Welcome back.',onBusy:value=>busy=value});
+ const submit=feedbackForm({pending:'Signing you in',success:'You’re signed in. Welcome back.',branded:true,onBusy:value=>busy=value});
 </script>
 <svelte:head><title>Sign in · Talazo Agritech</title><meta name="robots" content="noindex"/></svelte:head>
 <AuthShell><p class="p-kicker">WELCOME TO YOUR WORKSPACE</p><h2>Good to have you here.</h2><p>Sign in to follow your fields and growing season.</p>

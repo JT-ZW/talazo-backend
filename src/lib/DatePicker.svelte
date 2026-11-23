@@ -12,8 +12,15 @@
  $effect(()=>{if(input){const valid=!value||(mode==='month'?/^\d{4}-\d{2}$/.test(value)&&Number(value.slice(5))>=1&&Number(value.slice(5))<=12:validDate(value));input.setCustomValidity(!valid?'Enter a valid '+(mode==='month'?'month as YYYY-MM.':'date as YYYY-MM-DD.'):value&&!allowed(value)?'Choose a date within the allowed range.':'');}});
  async function toggle(){open=!open;if(open){month=(value||max||todayISO()).slice(0,7);above=window.innerHeight-root.getBoundingClientRect().bottom<370&&root.getBoundingClientRect().top>370;await tick();root.querySelector<HTMLButtonElement>('[data-date="'+(validDate(value)?value:todayISO())+'"]')?.focus();}}
  function select(v:string){if(!allowed(v))return;value=v;open=false;trigger?.focus();}
+ function dismissOnEscape(e:KeyboardEvent){
+  if(e.key!=='Escape'||!open)return false;
+  e.preventDefault();
+  open=false;
+  trigger.focus();
+  return true;
+ }
  async function keys(e:KeyboardEvent,date:string){
-  if(e.key==='Escape'){open=false;trigger.focus();return;}
+  if(dismissOnEscape(e))return;
   let target=date;
   if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(e.key)){
    e.preventDefault();const d=new Date(date+'T12:00:00Z'),weekDay=(d.getUTCDay()+6)%7;
@@ -23,7 +30,7 @@
  }
  onMount(()=>{const form=input.form;const reset=()=>{value='';open=false;};form?.addEventListener('reset',reset);return()=>form?.removeEventListener('reset',reset);});
 </script>
-<svelte:window onpointerdown={e=>{if(open&&root&&!root.contains(e.target as Node))open=false;}} onkeydown={e=>{if(open&&e.key==='Escape'){open=false;trigger.focus();}}}/>
+<svelte:window onpointerdown={e=>{if(open&&root&&!root.contains(e.target as Node))open=false;}} onkeydown={dismissOnEscape}/>
 <div class="date-picker" bind:this={root}>
  <div class="date-input"><input bind:this={input} {name} bind:value {required} aria-label={label} placeholder={mode==='month'?'YYYY-MM':'YYYY-MM-DD'} pattern={mode==='month'?'[0-9]{4}-[0-9]{2}':'[0-9]{4}-[0-9]{2}-[0-9]{2}'} autocomplete="off"/><button bind:this={trigger} type="button" class="calendar-toggle" aria-label={`Open calendar: ${label}`} aria-expanded={open} aria-controls={uid} onclick={toggle}><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v5m10-5v5M3 11h18m-13 4h2m4 0h2m-8 3h2"/></svg></button></div>
  {#if open}<div id={uid} class="calendar" class:above role="dialog" aria-label={label}>

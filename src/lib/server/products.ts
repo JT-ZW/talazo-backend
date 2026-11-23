@@ -5,10 +5,12 @@ import {indexDistribution,datedAdvisory} from '../advisory-model.mjs';
 import {georasterOverlay,readProviderRaster} from './georaster.mjs';
 type Client=ReturnType<typeof createSupabase>;
 export async function providerProduct(client:Client,monitoring:any,date:string,product:string){
+ const p=provider();
+ if(product.startsWith('overlay:')&&p.testing)return {state:'error',error:'Sample imagery is available in the original image view.'};
  const claim=await rpc(client,'talazo_claim_product',{p_monitoring:monitoring.id,p_product:product,p_date:date});
  if(claim.cached){const row=claim.item;return {state:row.state,value:row.data,error:row.error,fetchedAt:row.refreshed_at,retryAfter:row.retry_after};}
  if(claim.pending)return {state:'pending'};
- const db=service(),p=provider();let value:any;
+ const db=service();let value:any;
  try{
   if(product==='advisory'){
    const zone=await client.from('talazo_zones').select('crop_name,crop_code,sowing_date').eq('id',monitoring.zone_id).single();
@@ -49,7 +51,8 @@ export async function providerProduct(client:Client,monitoring:any,date:string,p
   return {state:'ready',value,fetchedAt};
  }catch(e){
   const message=e instanceof Error?e.message:'Provider data is unavailable.';
-  const retryAfter=new Date(Date.now()+5*60000).toISOString();
+  const temporaryOverlayFailure=product.startsWith('overlay:')&&/timed out|connection failed|HTTP 5\d\d/i.test(message);
+  const retryAfter=new Date(Date.now()+(temporaryOverlayFailure?30000:300000)).toISOString();
   await db.from('talazo_products').update({state:'error',error:message,retry_after:retryAfter,lease_id:null,lease_until:null}).eq('monitoring_id',monitoring.id).eq('product',product).eq('observed_on',date).eq('lease_id',claim.lease);
   return {state:'error',error:message,retryAfter};
  }
